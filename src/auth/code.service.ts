@@ -83,20 +83,19 @@ export class CodeService {
     if (!current) throw new AppException(400, 'CODE_INVALID', 'No active code');
     if (current.expiresAt <= now)
       throw new AppException(400, 'CODE_EXPIRED', 'Code expired');
-    if (current.attempts >= maxAttempts)
+    // The attempt is claimed atomically before comparing, so parallel guesses cannot exceed the limit.
+    const claimed = await this.prisma.verificationCode.updateMany({
+      where: { id: current.id, attempts: { lt: maxAttempts } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (claimed.count === 0)
       throw new AppException(
         400,
         'CODE_ATTEMPTS_EXCEEDED',
         'Too many attempts',
       );
-
-    if (!safeEqual(current.codeHash, this.hash(code))) {
-      await this.prisma.verificationCode.update({
-        where: { id: current.id },
-        data: { attempts: { increment: 1 } },
-      });
+    if (!safeEqual(current.codeHash, this.hash(code)))
       throw new AppException(400, 'CODE_INVALID', 'Wrong code');
-    }
     // updateMany keeps a code single-use even with concurrent requests.
     const { count } = await this.prisma.verificationCode.updateMany({
       where: { id: current.id, usedAt: null },

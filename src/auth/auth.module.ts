@@ -23,8 +23,10 @@ import { SessionService } from './session.service.js';
       useFactory: (config: ConfigService<Env, true>) => ({
         secret: config.get('JWT_SECRET'),
         signOptions: {
+          algorithm: 'HS256',
           expiresIn: Number(config.get('JWT_ACCESS_TTL_SECONDS')),
         },
+        verifyOptions: { algorithms: ['HS256'] },
       }),
     }),
     ThrottlerModule.forRootAsync({

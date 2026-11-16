@@ -33,6 +33,8 @@ export class RegistrationService {
     }
     await this.passwords.assertPolicy(dto.password);
 
+    // Hashed before looking the email up, so a new account and an unverified one take the same time.
+    const passwordHash = await this.passwords.hash(dto.password);
     const existing = await this.prisma.user.findUnique({ where: { email } });
     // A deleted account keeps its email taken (FR-025).
     if (existing?.deletedAt || existing?.emailVerifiedAt) {
@@ -48,7 +50,7 @@ export class RegistrationService {
       (await this.prisma.user.create({
         data: {
           email,
-          passwordHash: await this.passwords.hash(dto.password),
+          passwordHash,
           role: 'STUDENT',
           locale: dto.locale,
           studentProfile: {

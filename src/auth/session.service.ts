@@ -112,7 +112,8 @@ export class SessionService {
   }
 
   private hash(token: string) {
-    return hmacSha256(this.config.get('JWT_SECRET'), token);
+    // Prefix separates this use of the secret from JWT signing.
+    return hmacSha256(this.config.get('JWT_SECRET'), `refresh-token:${token}`);
   }
 
   private async expiryFrom(from: Date) {

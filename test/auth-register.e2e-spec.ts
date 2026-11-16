@@ -175,4 +175,15 @@ describe('student registration and email verification (US1)', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('EMAIL_NOT_VERIFIED');
   });
+
+  it('never lets parallel guesses exceed the attempt limit', async () => {
+    await register();
+    const code = ctx.mailbox.lastTo(EMAIL)!.code;
+    const bad = wrongCode();
+    await Promise.all(Array.from({ length: 20 }, () => verify(bad)));
+
+    const stored = await ctx.prisma.verificationCode.findFirstOrThrow();
+    expect(stored.attempts).toBe(5);
+    expect((await verify(code)).body.code).toBe('CODE_ATTEMPTS_EXCEEDED');
+  });
 });
