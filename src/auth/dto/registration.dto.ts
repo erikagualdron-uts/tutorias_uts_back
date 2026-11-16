@@ -42,3 +42,9 @@ export class VerifyEmailDto extends EmailDto {
   @Matches(/^[0-9]{6}$/)
   code!: string;
 }
+
+export class ResetPasswordDto extends VerifyEmailDto {
+  @IsString()
+  @MaxLength(128)
+  newPassword!: string;
+}

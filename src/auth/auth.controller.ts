@@ -14,8 +14,10 @@ import { RefreshDto } from './dto/refresh.dto.js';
 import {
   EmailDto,
   RegisterDto,
+  ResetPasswordDto,
   VerifyEmailDto,
 } from './dto/registration.dto.js';
+import { PasswordResetService } from './password-reset.service.js';
 import { RegistrationService } from './registration.service.js';
 
 @ApiTags('auth')
@@ -24,6 +26,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly registration: RegistrationService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   @Public()
@@ -52,6 +55,20 @@ export class AuthController {
   @HttpCode(200)
   login(@Body() dto: LoginDto, @Req() req: Request) {
     return this.auth.login(dto, req.ip ?? 'unknown');
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(202)
+  forgotPassword(@Body() dto: EmailDto) {
+    return this.passwordReset.forgot(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(204)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.passwordReset.reset(dto);
   }
 
   @Public()

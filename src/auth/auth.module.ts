@@ -12,6 +12,7 @@ import { CodeService } from './code.service.js';
 import { LoginAttemptsService } from './login-attempts.service.js';
 import { PasswordService } from './password.service.js';
 import { AuthService } from './auth.service.js';
+import { PasswordResetService } from './password-reset.service.js';
 import { RegistrationService } from './registration.service.js';
 import { SessionService } from './session.service.js';
 
@@ -40,6 +41,7 @@ import { SessionService } from './session.service.js';
   providers: [
     AuthService,
     RegistrationService,
+    PasswordResetService,
     PasswordService,
     CodeService,
     SessionService,
