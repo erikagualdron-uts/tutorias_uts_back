@@ -12,6 +12,7 @@ import { CodeService } from './code.service.js';
 import { LoginAttemptsService } from './login-attempts.service.js';
 import { PasswordService } from './password.service.js';
 import { AuthService } from './auth.service.js';
+import { RegistrationService } from './registration.service.js';
 import { SessionService } from './session.service.js';
 
 @Module({
@@ -38,6 +39,7 @@ import { SessionService } from './session.service.js';
   controllers: [AuthController],
   providers: [
     AuthService,
+    RegistrationService,
     PasswordService,
     CodeService,
     SessionService,

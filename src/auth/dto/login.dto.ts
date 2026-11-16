@@ -1,3 +1,4 @@
+import { Trim } from '../../common/trim.decorator.js';
 import {
   IsEmail,
   IsNotEmpty,
@@ -7,6 +8,7 @@ import {
 } from 'class-validator';
 
 export class LoginDto {
+  @Trim()
   @IsEmail()
   email!: string;
 

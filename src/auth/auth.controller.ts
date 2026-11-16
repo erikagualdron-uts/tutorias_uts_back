@@ -8,11 +8,41 @@ import {
 } from '../common/guards/decorators.js';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
+import {
+  EmailDto,
+  RegisterDto,
+  VerifyEmailDto,
+} from './dto/registration.dto.js';
+import { RegistrationService } from './registration.service.js';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly registration: RegistrationService,
+  ) {}
+
+  @Public()
+  @Post('register')
+  @HttpCode(202)
+  register(@Body() dto: RegisterDto) {
+    return this.registration.register(dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(204)
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.registration.verify(dto);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(202)
+  resendVerification(@Body() dto: EmailDto) {
+    return this.registration.resend(dto.email);
+  }
 
   @Public()
   @Post('login')

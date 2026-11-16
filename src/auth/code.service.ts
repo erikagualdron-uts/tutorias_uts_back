@@ -61,6 +61,7 @@ export class CodeService {
           userId,
           purpose,
           codeHash: this.hash(code),
+          createdAt: now,
           expiresAt: new Date(now.getTime() + ttlMs),
         },
       }),
