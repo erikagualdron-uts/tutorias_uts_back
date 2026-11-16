@@ -8,6 +8,7 @@ import { Clock } from '../../src/common/clock.js';
 import { MailService, type MailJob } from '../../src/mail/mail.service.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { REDIS } from '../../src/redis/redis.module.js';
+import { RoleProbeController } from './role-probe.controller.js';
 
 // Captures the verification and reset codes the API would email.
 export class FakeMailbox {
@@ -53,14 +54,12 @@ export interface TestContext {
 }
 
 export async function createTestApp(): Promise<TestContext> {
-  process.env.DATABASE_URL =
-    process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
-  // The e2e suites call public endpoints far more often than the production limit allows.
-  process.env.THROTTLE_PUBLIC_LIMIT ??= '100000';
-
   const mailbox = new FakeMailbox();
   const clock = new TestClock();
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+    controllers: [RoleProbeController],
+  })
     .overrideProvider(MailService)
     .useValue(mailbox)
     .overrideProvider(Clock)

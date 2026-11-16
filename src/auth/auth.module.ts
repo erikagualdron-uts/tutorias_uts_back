@@ -11,6 +11,7 @@ import { AuthController } from './auth.controller.js';
 import { CodeService } from './code.service.js';
 import { LoginAttemptsService } from './login-attempts.service.js';
 import { PasswordService } from './password.service.js';
+import { AuthService } from './auth.service.js';
 import { SessionService } from './session.service.js';
 
 @Module({
@@ -19,21 +20,24 @@ import { SessionService } from './session.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({
         secret: config.get('JWT_SECRET'),
-        signOptions: { expiresIn: config.get('JWT_ACCESS_TTL_SECONDS') },
+        signOptions: {
+          expiresIn: Number(config.get('JWT_ACCESS_TTL_SECONDS')),
+        },
       }),
     }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => [
         {
-          ttl: config.get('THROTTLE_PUBLIC_TTL_SECONDS') * 1000,
-          limit: config.get('THROTTLE_PUBLIC_LIMIT'),
+          ttl: Number(config.get('THROTTLE_PUBLIC_TTL_SECONDS')) * 1000,
+          limit: Number(config.get('THROTTLE_PUBLIC_LIMIT')),
         },
       ],
     }),
   ],
   controllers: [AuthController],
   providers: [
+    AuthService,
     PasswordService,
     CodeService,
     SessionService,

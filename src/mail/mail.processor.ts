@@ -31,7 +31,7 @@ export class MailProcessor extends WorkerHost {
     });
     const secretKey = this.config.get('SMTP_ENCRYPTION_KEY');
     const host = stored?.host ?? this.config.get('SMTP_HOST');
-    const port = stored?.port ?? this.config.get('SMTP_PORT');
+    const port = stored?.port ?? Number(this.config.get('SMTP_PORT'));
     const user = stored?.user ?? this.config.get('SMTP_USER');
     const pass = stored
       ? decryptAesGcm(secretKey, stored.passwordEncrypted)

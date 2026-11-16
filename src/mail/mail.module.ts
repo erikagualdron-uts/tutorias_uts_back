@@ -13,7 +13,7 @@ import { MAIL_QUEUE, MailService } from './mail.service.js';
       useFactory: (config: ConfigService<Env, true>) => ({
         connection: {
           host: config.get('REDIS_HOST'),
-          port: config.get('REDIS_PORT'),
+          port: Number(config.get('REDIS_PORT')),
         },
       }),
     }),

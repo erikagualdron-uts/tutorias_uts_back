@@ -14,7 +14,7 @@ export const REDIS = Symbol('REDIS');
       useFactory: (config: ConfigService<Env, true>) =>
         new Redis({
           host: config.get('REDIS_HOST'),
-          port: config.get('REDIS_PORT'),
+          port: Number(config.get('REDIS_PORT')),
         }),
     },
   ],
