@@ -1,0 +1,57 @@
+export interface Env {
+  PORT: number;
+  DATABASE_URL: string;
+  JWT_SECRET: string;
+  JWT_ACCESS_TTL_SECONDS: number;
+  CODE_HMAC_SECRET: string;
+  SMTP_ENCRYPTION_KEY: string;
+  REDIS_HOST: string;
+  REDIS_PORT: number;
+  SMTP_HOST: string;
+  SMTP_PORT: number;
+  SMTP_USER: string;
+  SMTP_PASSWORD: string;
+  SMTP_FROM: string;
+  THROTTLE_PUBLIC_LIMIT: number;
+  THROTTLE_PUBLIC_TTL_SECONDS: number;
+}
+
+const required = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'CODE_HMAC_SECRET',
+  'SMTP_ENCRYPTION_KEY',
+] as const;
+
+// The API must not start with a missing or weak secret (docs/Conventions.md §4).
+export function validateEnv(raw: Record<string, string | undefined>): Env {
+  const str = (key: string, fallback = '') => raw[key] ?? fallback;
+  const num = (key: string, fallback: number) => Number(raw[key] ?? fallback);
+
+  const missing = required.filter((key) => !raw[key]);
+  if (missing.length)
+    throw new Error(`Missing environment variables: ${missing.join(', ')}`);
+  if (str('JWT_SECRET').length < 32)
+    throw new Error('JWT_SECRET must have at least 32 characters');
+  if (!/^[0-9a-f]{64}$/i.test(str('SMTP_ENCRYPTION_KEY'))) {
+    throw new Error('SMTP_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
+  }
+
+  return {
+    PORT: num('PORT', 3000),
+    DATABASE_URL: str('DATABASE_URL'),
+    JWT_SECRET: str('JWT_SECRET'),
+    JWT_ACCESS_TTL_SECONDS: num('JWT_ACCESS_TTL_SECONDS', 900),
+    CODE_HMAC_SECRET: str('CODE_HMAC_SECRET'),
+    SMTP_ENCRYPTION_KEY: str('SMTP_ENCRYPTION_KEY'),
+    REDIS_HOST: str('REDIS_HOST', 'localhost'),
+    REDIS_PORT: num('REDIS_PORT', 6379),
+    SMTP_HOST: str('SMTP_HOST', 'localhost'),
+    SMTP_PORT: num('SMTP_PORT', 1025),
+    SMTP_USER: str('SMTP_USER'),
+    SMTP_PASSWORD: str('SMTP_PASSWORD'),
+    SMTP_FROM: str('SMTP_FROM', 'no-reply@uts.edu.co'),
+    THROTTLE_PUBLIC_LIMIT: num('THROTTLE_PUBLIC_LIMIT', 10),
+    THROTTLE_PUBLIC_TTL_SECONDS: num('THROTTLE_PUBLIC_TTL_SECONDS', 3600),
+  };
+}
