@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { User } from '@prisma/client';
 import { AppException } from '../common/errors/app.exception.js';
 import { normalizeEmail } from '../common/email.util.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { ChangePasswordDto } from './dto/change-password.dto.js';
 import type { LoginDto } from './dto/login.dto.js';
 import { LoginAttemptsService } from './login-attempts.service.js';
 import { PasswordService } from './password.service.js';
@@ -52,6 +54,33 @@ export class AuthService {
 
     await this.attempts.reset(email, ip);
     return this.openSession(user, dto.deviceLabel);
+  }
+
+  async changePassword(user: User, dto: ChangePasswordDto) {
+    if (
+      !(await this.passwords.verify(user.passwordHash, dto.currentPassword))
+    ) {
+      throw new AppException(
+        401,
+        'INVALID_CREDENTIALS',
+        'Current password is wrong',
+      );
+    }
+    await this.passwords.assertPolicy(dto.newPassword);
+    if (dto.newPassword === dto.currentPassword) {
+      throw new AppException(
+        400,
+        'PASSWORD_SAME_AS_CURRENT',
+        'New password equals the current one',
+      );
+    }
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await this.passwords.hash(dto.newPassword),
+        mustChangePassword: false,
+      },
+    });
   }
 
   async profileOf(userId: string) {

@@ -3,10 +3,12 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import {
   CurrentAuth,
+  AllowPasswordChange,
   Public,
   type AuthContext,
 } from '../common/guards/decorators.js';
 import { AuthService } from './auth.service.js';
+import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import {
   EmailDto,
@@ -52,8 +54,20 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @AllowPasswordChange()
   @Get('me')
   me(@CurrentAuth() { user }: AuthContext) {
     return this.auth.profileOf(user.id);
+  }
+
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @Post('change-password')
+  @HttpCode(204)
+  changePassword(
+    @CurrentAuth() { user }: AuthContext,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.auth.changePassword(user, dto);
   }
 }

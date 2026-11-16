@@ -4,7 +4,11 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import { SessionService } from '../../auth/session.service.js';
 import { AppException } from '../errors/app.exception.js';
-import { type AuthContext, IS_PUBLIC } from './decorators.js';
+import {
+  ALLOW_PASSWORD_CHANGE,
+  type AuthContext,
+  IS_PUBLIC,
+} from './decorators.js';
 
 interface AccessTokenPayload {
   sub: string;
@@ -46,7 +50,24 @@ export class JwtAuthGuard implements CanActivate {
       });
     // Loaded on every request: a disabled or deleted account loses access immediately.
     const session = await this.sessions.validate(payload.sid, payload.sub);
+    if (
+      session.user.mustChangePassword &&
+      !this.isAllowedDuringPasswordChange(context)
+    ) {
+      throw new AppException(
+        403,
+        'PASSWORD_CHANGE_REQUIRED',
+        'Change the temporary password first',
+      );
+    }
     request.auth = { user: session.user, sessionId: session.id };
     return true;
+  }
+
+  private isAllowedDuringPasswordChange(context: ExecutionContext) {
+    return !!this.reflector.getAllAndOverride<boolean>(ALLOW_PASSWORD_CHANGE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
   }
 }

@@ -6,6 +6,7 @@ import { validateEnv } from './config/env.js';
 import { MailModule } from './mail/mail.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
+import { TeachersModule } from './teachers/teachers.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 
 @Module({
@@ -17,6 +18,7 @@ import { SettingsModule } from './settings/settings.module.js';
     RedisModule,
     MailModule,
     AuthModule,
+    TeachersModule,
   ],
 })
 export class AppModule {}

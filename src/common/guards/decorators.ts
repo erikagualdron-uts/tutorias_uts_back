@@ -21,3 +21,8 @@ export const CurrentAuth = createParamDecorator(
   (_: unknown, context: ExecutionContext): AuthContext =>
     context.switchToHttp().getRequest<{ auth: AuthContext }>().auth,
 );
+
+export const ALLOW_PASSWORD_CHANGE = 'allowPasswordChange';
+// Routes a user with a temporary password may still call (change it, see who they are, sign out).
+export const AllowPasswordChange = () =>
+  SetMetadata(ALLOW_PASSWORD_CHANGE, true);

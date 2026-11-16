@@ -9,4 +9,9 @@ export class RoleProbeController {
   admin() {
     return { ok: true };
   }
+
+  @Get('any')
+  any() {
+    return { ok: true };
+  }
 }
