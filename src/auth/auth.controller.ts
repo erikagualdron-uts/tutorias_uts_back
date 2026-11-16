@@ -10,6 +10,7 @@ import {
 import { AuthService } from './auth.service.js';
 import { ChangePasswordDto } from './dto/change-password.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { RefreshDto } from './dto/refresh.dto.js';
 import {
   EmailDto,
   RegisterDto,
@@ -51,6 +52,21 @@ export class AuthController {
   @HttpCode(200)
   login(@Body() dto: LoginDto, @Req() req: Request) {
     return this.auth.login(dto, req.ip ?? 'unknown');
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body() dto: RefreshDto) {
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@CurrentAuth() { sessionId }: AuthContext) {
+    await this.auth.logout(sessionId);
   }
 
   @ApiBearerAuth()

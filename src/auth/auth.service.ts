@@ -56,6 +56,20 @@ export class AuthService {
     return this.openSession(user, dto.deviceLabel);
   }
 
+  async refresh(refreshToken: string) {
+    const { session, refreshToken: rotated } =
+      await this.sessions.rotate(refreshToken);
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: session.userId },
+      include: WITH_PROFILES,
+    });
+    return this.tokensFor(user, session.id, rotated);
+  }
+
+  logout(sessionId: string) {
+    return this.sessions.revoke(sessionId);
+  }
+
   async changePassword(user: User, dto: ChangePasswordDto) {
     if (
       !(await this.passwords.verify(user.passwordHash, dto.currentPassword))
@@ -96,9 +110,17 @@ export class AuthService {
       user.id,
       deviceLabel,
     );
+    return this.tokensFor(user, session.id, refreshToken);
+  }
+
+  private async tokensFor(
+    user: UserWithProfiles,
+    sessionId: string,
+    refreshToken: string,
+  ) {
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
-      sid: session.id,
+      sid: sessionId,
     });
     return { accessToken, refreshToken, user: toUserSummary(user) };
   }
