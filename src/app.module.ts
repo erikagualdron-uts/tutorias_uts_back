@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { TeachersModule } from './teachers/teachers.module.js';
 import { SettingsModule } from './settings/settings.module.js';
+import { UsersModule } from './users/users.module.js';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { SettingsModule } from './settings/settings.module.js';
     MailModule,
     AuthModule,
     TeachersModule,
+    UsersModule,
   ],
 })
 export class AppModule {}
