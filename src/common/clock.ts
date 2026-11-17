@@ -12,7 +12,7 @@ export class Clock {
 @Module({ providers: [Clock], exports: [Clock] })
 export class ClockModule {}
 
-const BOGOTA_UTC_OFFSET_HOURS = 5; // America/Bogota is UTC-5 all year (no daylight saving)
+export const BOGOTA_UTC_OFFSET_HOURS = 5; // America/Bogota is UTC-5 all year (no daylight saving)
 
 // Instant (UTC) at which the calendar day `day` (YYYY-MM-DD or Date at UTC midnight) ends in
 // America/Bogota: the next day at 00:00 Bogota time.
