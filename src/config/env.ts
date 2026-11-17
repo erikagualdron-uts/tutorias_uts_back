@@ -14,6 +14,9 @@ export interface Env {
   SMTP_FROM: string;
   THROTTLE_PUBLIC_LIMIT: number;
   THROTTLE_PUBLIC_TTL_SECONDS: number;
+  HOLIDAYS_API_BASE_URL: string;
+  HOLIDAYS_COUNTRY: string;
+  HOLIDAYS_TIMEOUT_MS: number;
 }
 
 const required = [
@@ -37,6 +40,19 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     throw new Error('SMTP_ENCRYPTION_KEY must be 64 hex characters (32 bytes)');
   }
 
+  const holidaysCountry = str('HOLIDAYS_COUNTRY', 'CO');
+  if (!/^[A-Z]{2}$/.test(holidaysCountry))
+    throw new Error('HOLIDAYS_COUNTRY must be two uppercase letters');
+  const holidaysTimeoutMs = num('HOLIDAYS_TIMEOUT_MS', 10000);
+  if (!Number.isInteger(holidaysTimeoutMs) || holidaysTimeoutMs <= 0)
+    throw new Error('HOLIDAYS_TIMEOUT_MS must be a positive integer');
+  const holidaysBaseUrl = str(
+    'HOLIDAYS_API_BASE_URL',
+    'https://date.nager.at/api/v3',
+  );
+  if (!/^https?:\/\//.test(holidaysBaseUrl))
+    throw new Error('HOLIDAYS_API_BASE_URL must be an http(s) URL');
+
   return {
     PORT: num('PORT', 3000),
     DATABASE_URL: str('DATABASE_URL'),
@@ -53,5 +69,8 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     SMTP_FROM: str('SMTP_FROM', 'no-reply@uts.edu.co'),
     THROTTLE_PUBLIC_LIMIT: num('THROTTLE_PUBLIC_LIMIT', 10),
     THROTTLE_PUBLIC_TTL_SECONDS: num('THROTTLE_PUBLIC_TTL_SECONDS', 3600),
+    HOLIDAYS_API_BASE_URL: holidaysBaseUrl.replace(/\/+$/, ''),
+    HOLIDAYS_COUNTRY: holidaysCountry,
+    HOLIDAYS_TIMEOUT_MS: holidaysTimeoutMs,
   };
 }
