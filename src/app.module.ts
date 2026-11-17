@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { ClockModule } from './common/clock.js';
 import { ConfigUsageModule } from './config-usage/config-usage.module.js';
 import { PeriodsModule } from './periods/periods.module.js';
+import { RoomsModule } from './rooms/rooms.module.js';
 import { validateEnv } from './config/env.js';
 import { MailModule } from './mail/mail.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module.js';
     SettingsModule,
     ConfigUsageModule,
     PeriodsModule,
+    RoomsModule,
     RedisModule,
     MailModule,
     AuthModule,
