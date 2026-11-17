@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { PageQuery } from '../../common/page-query.js';
 import { Trim } from '../../common/trim.decorator.js';
 
 const TIME_FORMAT = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -58,4 +59,39 @@ export class CreateModuleDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleDto)
   schedules!: ScheduleDto[];
+}
+
+export class ListModulesQuery extends PageQuery {
+  @IsOptional()
+  @IsUUID()
+  periodId?: string;
+
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @IsOptional()
+  @IsUUID()
+  teacherId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  roomId?: string;
+}
+
+export class ListSessionsQuery extends PageQuery {
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  from?: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  to?: string;
+}
+
+export class ChangeRoomDto {
+  @IsUUID()
+  roomId!: string;
 }
