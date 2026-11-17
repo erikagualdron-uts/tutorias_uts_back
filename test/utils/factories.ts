@@ -35,3 +35,58 @@ export async function createUser(
     },
   });
 }
+
+let counter = 0;
+const nextId = () => `${Date.now().toString(36)}${(counter++).toString(36)}`.slice(-8);
+
+export function createPeriod(
+  prisma: PrismaService,
+  overrides: {
+    name?: string;
+    startsOn?: string;
+    endsOn?: string;
+    status?: 'UPCOMING' | 'ACTIVE' | 'CLOSED';
+    deletedAt?: Date | null;
+  } = {},
+) {
+  return prisma.academicPeriod.create({
+    data: {
+      name: overrides.name ?? `P-${nextId()}`,
+      startsOn: new Date(`${overrides.startsOn ?? '2030-01-01'}T00:00:00Z`),
+      endsOn: new Date(`${overrides.endsOn ?? '2030-06-30'}T00:00:00Z`),
+      status: overrides.status ?? 'UPCOMING',
+      deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}
+
+export function createLocation(
+  prisma: PrismaService,
+  overrides: { name?: string; deletedAt?: Date | null } = {},
+) {
+  return prisma.location.create({
+    data: { name: overrides.name ?? `Sede ${nextId()}`, deletedAt: overrides.deletedAt ?? null },
+  });
+}
+
+export async function createRoom(
+  prisma: PrismaService,
+  overrides: {
+    locationId?: string;
+    name?: string;
+    capacity?: number;
+    status?: 'ACTIVE' | 'INACTIVE';
+    deletedAt?: Date | null;
+  } = {},
+) {
+  const locationId = overrides.locationId ?? (await createLocation(prisma)).id;
+  return prisma.room.create({
+    data: {
+      locationId,
+      name: overrides.name ?? `R-${nextId()}`,
+      capacity: overrides.capacity ?? 30,
+      status: overrides.status ?? 'ACTIVE',
+      deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}
