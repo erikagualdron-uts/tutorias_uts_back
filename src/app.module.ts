@@ -4,6 +4,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module.js';
 import { ClockModule } from './common/clock.js';
 import { ConfigUsageModule } from './config-usage/config-usage.module.js';
+import { ModulesModule } from './modules/modules.module.js';
+import { OutboxModule } from './outbox/outbox.module.js';
 import { PeriodsModule } from './periods/periods.module.js';
 import { RoomsModule } from './rooms/rooms.module.js';
 import { validateEnv } from './config/env.js';
@@ -23,6 +25,8 @@ import { UsersModule } from './users/users.module.js';
     SettingsModule,
     ConfigUsageModule,
     PeriodsModule,
+    OutboxModule,
+    ModulesModule,
     RoomsModule,
     RedisModule,
     MailModule,
