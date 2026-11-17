@@ -9,9 +9,12 @@ import { parseCalendarDay } from '../periods/periods.rules.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   ChangeRoomDto,
+  ChangeTeacherDto,
   CreateModuleDto,
   ListModulesQuery,
   ListSessionsQuery,
+  ReplaceSchedulesDto,
+  UpdateModuleDto,
 } from './dto/module.dto.js';
 import { SchedulesService } from './schedules.service.js';
 import { SessionsGenerator } from './sessions.generator.js';
@@ -240,55 +243,164 @@ export class ModulesService {
     };
   }
 
-  // FR-010: the new room must be free at the slots and hold at least the enrolled students; future
-  // sessions follow it and past ones keep the room they were given in.
-  async changeRoom(id: string, dto: ChangeRoomDto): Promise<ModuleDetailView> {
+  // FR-010: the new room must be free at the slots and hold at least the enrolled students.
+  changeRoom(id: string, dto: ChangeRoomDto) {
+    return this.reassign(id, 'room', dto.roomId);
+  }
+
+  // FR-011: the new teacher must be active and free at the slots.
+  changeTeacher(id: string, dto: ChangeTeacherDto) {
+    return this.reassign(id, 'teacher', dto.teacherId);
+  }
+
+  // FR-012: name and description can always change, with or without enrolled students.
+  async update(id: string, dto: UpdateModuleDto): Promise<ModuleDetailView> {
+    await this.periods.closeExpired();
+    const current = await this.findLive(id);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockModule(tx, id, current.periodId);
+      await tx.module.update({
+        where: { id },
+        data: { name: dto.name, ...(dto.description !== undefined && { description: dto.description || null }) },
+      });
+    });
+    return this.detail(id);
+  }
+
+  // FR-013: only without enrolled students. Past sessions stay; future ones are generated again.
+  async replaceSchedules(id: string, dto: ReplaceSchedulesDto): Promise<ModuleDetailView> {
+    const slots = this.schedules.parse(dto.schedules);
     await this.periods.closeExpired();
     const current = await this.findLive(id);
     const availability = {
       teacherId: current.teacherId,
-      roomId: dto.roomId,
+      roomId: current.roomId,
+      periodId: current.periodId,
+      slots,
+      ignoreModuleId: id,
+    };
+    try {
+      const generated = await this.prisma.$transaction(async (tx) => {
+        await this.lockModule(tx, id, current.periodId);
+        await this.assertNoEnrollments(id);
+        await this.schedules.assertFree(tx, availability);
+        const now = this.clock.now();
+        // Old slots go first: the exclusion constraints only look at live rows.
+        await tx.moduleSchedule.updateMany({ where: { moduleId: id, deletedAt: null }, data: { deletedAt: now } });
+        await tx.moduleSession.updateMany({
+          where: { moduleId: id, deletedAt: null, startsAt: { gt: now } },
+          data: { deletedAt: now },
+        });
+        const rows = [];
+        for (const slot of slots) {
+          rows.push(
+            await tx.moduleSchedule.create({
+              data: { moduleId: id, periodId: current.periodId, teacherId: current.teacherId, roomId: current.roomId, ...slot },
+            }),
+          );
+        }
+        return this.generator.generate(tx, {
+          moduleId: id,
+          teacherId: current.teacherId,
+          roomId: current.roomId,
+          startsOn: current.period.startsOn,
+          endsOn: current.period.endsOn,
+          schedules: rows,
+        });
+      });
+      return await this.detail(id, generated);
+    } catch (error) {
+      throw await this.schedules.translate(error, availability);
+    }
+  }
+
+  // FR-014: logical delete, only without enrolled students; it frees the teacher and the room.
+  async remove(id: string): Promise<void> {
+    await this.periods.closeExpired();
+    const current = await this.findLive(id);
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockModule(tx, id, current.periodId);
+      await this.assertNoEnrollments(id);
+      const deletedAt = this.clock.now();
+      await tx.module.update({ where: { id }, data: { deletedAt } });
+      await tx.moduleSchedule.updateMany({ where: { moduleId: id, deletedAt: null }, data: { deletedAt } });
+      await tx.moduleSession.updateMany({
+        where: { moduleId: id, deletedAt: null, startsAt: { gt: deletedAt } },
+        data: { deletedAt },
+      });
+    });
+  }
+
+  // Room or teacher change (research.md R-6, R-7): checked, applied to the module, its slots and its
+  // future sessions, and recorded for the notifications. Past sessions keep who and where they had.
+  private async reassign(id: string, kind: 'room' | 'teacher', targetId: string): Promise<ModuleDetailView> {
+    await this.periods.closeExpired();
+    const current = await this.findLive(id);
+    const availability = {
+      teacherId: kind === 'teacher' ? targetId : current.teacherId,
+      roomId: kind === 'room' ? targetId : current.roomId,
       periodId: current.periodId,
       slots: current.schedules,
       ignoreModuleId: id,
     };
+    const field = kind === 'room' ? 'roomId' : 'teacherId';
     try {
       await this.prisma.$transaction(async (tx) => {
-        await this.lockWritablePeriod(tx, current.periodId);
-        await tx.$queryRaw`SELECT id FROM modules WHERE id = ${id}::uuid FOR UPDATE`;
-        const module = await tx.module.findFirst({ where: { id, deletedAt: null } });
-        if (!module) throw new AppException(404, 'NOT_FOUND', 'Module not found');
-        if (module.roomId === dto.roomId) return;
-        await this.assertRoom(tx, dto.roomId);
-        const room = await tx.room.findUniqueOrThrow({ where: { id: dto.roomId } });
+        const module = await this.lockModule(tx, id, current.periodId);
+        if (module[field] === targetId) return;
         const enrolled = await this.usage.countActiveEnrollments(id);
-        if (room.capacity < enrolled) {
-          throw new AppException(409, 'MODULE_ROOM_CAPACITY_BELOW_ENROLLED', 'The room is too small', {
-            capacity: room.capacity,
-            enrolled,
-          });
+        if (kind === 'room') {
+          await this.assertRoom(tx, targetId);
+          const { capacity } = await tx.room.findUniqueOrThrow({ where: { id: targetId } });
+          if (capacity < enrolled) {
+            throw new AppException(409, 'MODULE_ROOM_CAPACITY_BELOW_ENROLLED', 'The room is too small', {
+              capacity,
+              enrolled,
+            });
+          }
+        } else {
+          await this.assertTeacher(tx, targetId);
         }
-        const conflict = await this.schedules.findConflict(tx, { kind: 'room', id: dto.roomId, ...availability });
+        const conflict = await this.schedules.findConflict(tx, { kind, id: targetId, ...availability });
         if (conflict) {
-          throw new AppException(409, 'MODULE_ROOM_CONFLICT', 'The room is taken at that time', { conflict });
+          throw kind === 'room'
+            ? new AppException(409, 'MODULE_ROOM_CONFLICT', 'The room is taken at that time', { conflict })
+            : new AppException(409, 'MODULE_TEACHER_CONFLICT', 'The teacher has another module at that time', { conflict });
         }
+        const data = { [field]: targetId };
         const live = { moduleId: id, deletedAt: null };
-        await tx.module.update({ where: { id }, data: { roomId: dto.roomId } });
-        await tx.moduleSchedule.updateMany({ where: live, data: { roomId: dto.roomId } });
-        await tx.moduleSession.updateMany({
-          where: { ...live, startsAt: { gt: this.clock.now() } },
-          data: { roomId: dto.roomId },
-        });
+        await tx.module.update({ where: { id }, data });
+        await tx.moduleSchedule.updateMany({ where: live, data });
+        await tx.moduleSession.updateMany({ where: { ...live, startsAt: { gt: this.clock.now() } }, data });
         await this.outbox.record(tx, {
-          type: 'MODULE_ROOM_CHANGED',
+          type: kind === 'room' ? 'MODULE_ROOM_CHANGED' : 'MODULE_TEACHER_CHANGED',
           moduleId: id,
-          payload: { fromRoomId: module.roomId, toRoomId: dto.roomId, enrolled },
+          payload: kind === 'room'
+            ? { fromRoomId: module.roomId, toRoomId: targetId, enrolled }
+            : { fromTeacherId: module.teacherId, toTeacherId: targetId, enrolled },
         });
       });
     } catch (error) {
       throw await this.schedules.translate(error, availability);
     }
     return this.detail(id);
+  }
+
+  // Shared lock on the period, then an exclusive one on the module (a concurrent enrollment locks
+  // the same row, so the enrolled count read afterwards cannot change under this transaction).
+  private async lockModule(tx: Prisma.TransactionClient, id: string, periodId: string) {
+    await this.lockWritablePeriod(tx, periodId);
+    await tx.$queryRaw`SELECT id FROM modules WHERE id = ${id}::uuid FOR UPDATE`;
+    const module = await tx.module.findFirst({ where: { id, deletedAt: null } });
+    if (!module) throw new AppException(404, 'NOT_FOUND', 'Module not found');
+    return module;
+  }
+
+  private async assertNoEnrollments(moduleId: string) {
+    const enrolled = await this.usage.countActiveEnrollments(moduleId);
+    if (enrolled > 0) {
+      throw new AppException(409, 'MODULE_HAS_ENROLLMENTS', 'The module has enrolled students', { enrolled });
+    }
   }
 
   async detail(id: string, generated?: ReadonlyMap<string, number>): Promise<ModuleDetailView> {

@@ -95,3 +95,31 @@ export class ChangeRoomDto {
   @IsUUID()
   roomId!: string;
 }
+
+export class ChangeTeacherDto {
+  @IsUUID()
+  teacherId!: string;
+}
+
+export class UpdateModuleDto {
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @Trim()
+  @IsString()
+  @MaxLength(1000)
+  description?: string | null;
+}
+
+export class ReplaceSchedulesDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleDto)
+  schedules!: ScheduleDto[];
+}
