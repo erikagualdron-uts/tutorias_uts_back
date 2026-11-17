@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createUser, TEST_PASSWORD } from './utils/factories.js';
+import { createTeacher as insertTeacher, createUser, TEST_PASSWORD } from './utils/factories.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
 
 describe('teacher creation and temporary password (US3)', () => {
@@ -129,5 +129,87 @@ describe('teacher creation and temporary password (US3)', () => {
     expect(
       (await login(teacher.email, 'Nueva12345')).body.user.mustChangePassword,
     ).toBe(false);
+  });
+});
+
+describe('teachers list for the module selector (spec 010)', () => {
+  let ctx: TestContext;
+  let token: string;
+
+  beforeAll(async () => {
+    ctx = await createTestApp();
+  });
+  beforeEach(async () => {
+    await ctx.reset();
+    const admin = await createUser(ctx.prisma, { role: 'SUPERADMIN' });
+    const res = await ctx
+      .http()
+      .post('/api/v1/auth/login')
+      .send({ email: admin.email, password: TEST_PASSWORD });
+    token = res.body.accessToken as string;
+  });
+  afterAll(() => ctx.close());
+
+  const list = (query = '', bearer = token) =>
+    ctx.http().get(`/api/v1/teachers${query}`).set('Authorization', `Bearer ${bearer}`);
+
+  it('lists active and inactive teachers by last name then first name, without sensitive data', async () => {
+    await insertTeacher(ctx.prisma, { firstName: 'Zoila', lastName: 'Arias' });
+    await insertTeacher(ctx.prisma, { firstName: 'Ana', lastName: 'Becerra' });
+    await insertTeacher(ctx.prisma, { firstName: 'Luis', lastName: 'Arias', status: 'INACTIVE' });
+    const res = await list();
+    expect(res.status).toBe(200);
+    expect(res.body.data.map((t: { firstName: string; lastName: string }) => `${t.lastName} ${t.firstName}`)).toEqual([
+      'Arias Luis',
+      'Arias Zoila',
+      'Becerra Ana',
+    ]);
+    expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
+    expect(Object.keys(res.body.data[0]).sort()).toEqual(['firstName', 'id', 'lastName', 'status']);
+  });
+
+  it('leaves out deleted teachers, students and administrators', async () => {
+    await insertTeacher(ctx.prisma, { firstName: 'Borrado', deletedAt: new Date() });
+    await createUser(ctx.prisma, { role: 'STUDENT' });
+    await insertTeacher(ctx.prisma, { firstName: 'Visible' });
+    const res = await list();
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].firstName).toBe('Visible');
+  });
+
+  it('filters by status and searches names ignoring case', async () => {
+    await insertTeacher(ctx.prisma, { firstName: 'María', lastName: 'Pérez' });
+    await insertTeacher(ctx.prisma, { firstName: 'Mario', lastName: 'Rojas', status: 'INACTIVE' });
+    expect((await list('?status=ACTIVE')).body.data.map((t: { firstName: string }) => t.firstName)).toEqual(['María']);
+    expect((await list('?status=INACTIVE')).body.data.map((t: { firstName: string }) => t.firstName)).toEqual(['Mario']);
+    expect((await list('?search=rojas')).body.data).toHaveLength(1);
+    expect((await list('?search=MAR')).body.data).toHaveLength(2);
+    expect((await list('?search=zzz')).body.data).toEqual([]);
+  });
+
+  it('paginates', async () => {
+    for (const lastName of ['A', 'B', 'C']) await insertTeacher(ctx.prisma, { lastName });
+    const res = await list('?limit=2&page=2');
+    expect(res.body.data.map((t: { lastName: string }) => t.lastName)).toEqual(['C']);
+    expect(res.body.meta).toEqual({ page: 2, limit: 2, total: 3 });
+  });
+
+  it('rejects an unknown status', async () => {
+    expect((await list('?status=MAYBE')).status).toBe(400);
+  });
+
+  it('is for the CAE only', async () => {
+    const teacher = await createUser(ctx.prisma, { role: 'TEACHER' });
+    const student = await createUser(ctx.prisma, { role: 'STUDENT' });
+    for (const user of [teacher, student]) {
+      const login = await ctx
+        .http()
+        .post('/api/v1/auth/login')
+        .send({ email: user.email, password: TEST_PASSWORD });
+      const res = await list('', login.body.accessToken as string);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('FORBIDDEN_ROLE');
+    }
+    expect((await ctx.http().get('/api/v1/teachers')).status).toBe(401);
   });
 });

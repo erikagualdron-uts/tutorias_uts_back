@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { Clock } from '../common/clock.js';
 import { hasEmailDomain, normalizeEmail } from '../common/email.util.js';
 import { AppException } from '../common/errors/app.exception.js';
@@ -7,6 +8,7 @@ import { toUserSummary } from '../auth/user-summary.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import type { CreateTeacherDto } from './dto/create-teacher.dto.js';
+import type { ListTeachersQuery } from './dto/list-teachers.dto.js';
 import { TemporaryPasswordService } from './temporary-password.service.js';
 
 @Injectable()
@@ -18,6 +20,45 @@ export class TeachersService {
     private readonly temporary: TemporaryPasswordService,
     private readonly clock: Clock,
   ) {}
+
+  async list(query: ListTeachersQuery) {
+    const search = query.search?.trim();
+    const where: Prisma.UserWhereInput = {
+      role: 'TEACHER',
+      deletedAt: null,
+      ...(query.status && { status: query.status }),
+      ...(search && {
+        teacherProfile: {
+          OR: [
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      }),
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        include: { teacherProfile: { select: { firstName: true, lastName: true } } },
+        orderBy: [
+          { teacherProfile: { lastName: 'asc' } },
+          { teacherProfile: { firstName: 'asc' } },
+        ],
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return {
+      data: rows.map((user) => ({
+        id: user.id,
+        firstName: user.teacherProfile?.firstName ?? '',
+        lastName: user.teacherProfile?.lastName ?? '',
+        status: user.status,
+      })),
+      meta: { page: query.page, limit: query.limit, total },
+    };
+  }
 
   async create(dto: CreateTeacherDto) {
     const email = normalizeEmail(dto.email);
