@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 
-// Stable codes from specs/001-auth-roles and specs/006-cae-configuration contracts; the app translates them.
+// Stable codes from specs/001-auth-roles, 006-cae-configuration and 010-modules-sessions contracts; the app translates them.
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
   'EMAIL_ALREADY_REGISTERED',
@@ -39,6 +39,17 @@ export const ERROR_CODES = [
   'DROPDOWN_LABEL_REQUIRED',
   'DROPDOWN_ITEM_IN_USE',
   'DROPDOWN_ORDER_INVALID',
+  'MODULE_SCHEDULE_INVALID',
+  'MODULE_SCHEDULE_SELF_OVERLAP',
+  'MODULE_TEACHER_CONFLICT',
+  'MODULE_ROOM_CONFLICT',
+  'MODULE_TEACHER_UNAVAILABLE',
+  'MODULE_ROOM_UNAVAILABLE',
+  'MODULE_ROOM_CAPACITY_BELOW_ENROLLED',
+  'MODULE_HAS_ENROLLMENTS',
+  'HOLIDAY_DATE_TAKEN',
+  'HOLIDAY_IN_PAST',
+  'HOLIDAYS_IMPORT_UNAVAILABLE',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;
