@@ -17,6 +17,8 @@ export interface Env {
   HOLIDAYS_API_BASE_URL: string;
   HOLIDAYS_COUNTRY: string;
   HOLIDAYS_TIMEOUT_MS: number;
+  MODULE_EARLIEST_MINUTE: number;
+  MODULE_LATEST_MINUTE: number;
 }
 
 const required = [
@@ -53,6 +55,17 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
   if (!/^https?:\/\//.test(holidaysBaseUrl))
     throw new Error('HOLIDAYS_API_BASE_URL must be an http(s) URL');
 
+  // Hours a module may be held (HH:mm, America/Bogota); a session ends by the latest, never after.
+  const hhmm = (key: string, fallback: string) => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(str(key, fallback));
+    if (!match) throw new Error(`${key} must be a time as HH:mm`);
+    return Number(match[1]) * 60 + Number(match[2]);
+  };
+  const earliest = hhmm('MODULE_EARLIEST_TIME', '06:00');
+  const latest = hhmm('MODULE_LATEST_TIME', '18:00');
+  if (earliest >= latest)
+    throw new Error('MODULE_EARLIEST_TIME must be before MODULE_LATEST_TIME');
+
   return {
     PORT: num('PORT', 3000),
     DATABASE_URL: str('DATABASE_URL'),
@@ -72,5 +85,7 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     HOLIDAYS_API_BASE_URL: holidaysBaseUrl.replace(/\/+$/, ''),
     HOLIDAYS_COUNTRY: holidaysCountry,
     HOLIDAYS_TIMEOUT_MS: holidaysTimeoutMs,
+    MODULE_EARLIEST_MINUTE: earliest,
+    MODULE_LATEST_MINUTE: latest,
   };
 }

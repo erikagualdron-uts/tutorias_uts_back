@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 import { violatedConstraint } from '../common/db-errors.js';
 import { AppException } from '../common/errors/app.exception.js';
+import type { Env } from '../config/env.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { ScheduleDto } from './dto/module.dto.js';
 import {
@@ -41,10 +43,13 @@ type Db = PrismaService | Prisma.TransactionClient;
 // name the module and the hours that collide.
 @Injectable()
 export class SchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
 
   // "HH:mm" slots to minutes, rejecting an end that is not after the start and slots of the same
-  // module that overlap (FR-003).
+  // module that overlap (FR-003), and slots outside the configured hours.
   parse(input: readonly ScheduleDto[]): Slot[] {
     const slots = input.map((s): Slot => {
       const startMinute = parseTime(s.startTime);
@@ -59,6 +64,16 @@ export class SchedulesService {
         422,
         'MODULE_SCHEDULE_INVALID',
         'Each slot needs an end after its start, in the same day',
+      );
+    }
+    const earliest = this.config.get('MODULE_EARLIEST_MINUTE', { infer: true });
+    const latest = this.config.get('MODULE_LATEST_MINUTE', { infer: true });
+    if (slots.some((s) => s.startMinute < earliest || s.endMinute > latest)) {
+      throw new AppException(
+        422,
+        'MODULE_SCHEDULE_OUT_OF_HOURS',
+        'A slot is outside the hours modules can be held',
+        { earliest: formatTime(earliest), latest: formatTime(latest) },
       );
     }
     if (findOverlappingSlots(slots)) {

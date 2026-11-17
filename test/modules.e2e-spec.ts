@@ -257,6 +257,25 @@ describe('modules: create (US1)', () => {
       expect(await moduleCount()).toBe(0);
     });
 
+    it.each([
+      ['starting before 06:00', { startTime: '05:59', endTime: '08:00' }],
+      ['ending after 18:00', { startTime: '17:00', endTime: '18:01' }],
+      ['held at night', { startTime: '19:00', endTime: '21:00' }],
+    ])('rejects a slot %s and names the hours', async (_label, times) => {
+      const { body } = await base();
+      const res = await create(body({ schedules: [{ dayOfWeek: 2, ...times }] }));
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('MODULE_SCHEDULE_OUT_OF_HOURS');
+      expect(res.body.details).toEqual({ earliest: '06:00', latest: '18:00' });
+      expect(await moduleCount()).toBe(0);
+    });
+
+    it('accepts a slot from 06:00 to 18:00 exactly', async () => {
+      const { body } = await base();
+      const res = await create(body({ schedules: [{ dayOfWeek: 2, startTime: '06:00', endTime: '18:00' }] }));
+      expect(res.status).toBe(201);
+    });
+
     it('rejects two slots of the same module that overlap, but not two that touch', async () => {
       const { body } = await base();
       const overlap = await create(

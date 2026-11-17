@@ -232,6 +232,8 @@ describe('modules: change teacher, edit and delete (US4, US5)', () => {
       const invalid = await call('put', `/modules/${id}/schedules`, { schedules: [{ ...tuesday, endTime: '13:00' }] });
       expect(invalid.status).toBe(422);
       expect(invalid.body.code).toBe('MODULE_SCHEDULE_INVALID');
+      const night = await call('put', `/modules/${id}/schedules`, { schedules: [{ ...tuesday, startTime: '17:00', endTime: '19:00' }] });
+      expect(night.body.code).toBe('MODULE_SCHEDULE_OUT_OF_HOURS');
       const overlap = await call('put', `/modules/${id}/schedules`, { schedules: [tuesday, { ...tuesday, startTime: '15:00', endTime: '17:00' }] });
       expect(overlap.body.code).toBe('MODULE_SCHEDULE_SELF_OVERLAP');
       const closed = await setup('CLOSED');
