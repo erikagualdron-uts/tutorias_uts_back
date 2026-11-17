@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AuthModule } from './auth/auth.module.js';
 import { ClockModule } from './common/clock.js';
 import { ConfigUsageModule } from './config-usage/config-usage.module.js';
+import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { HolidaysModule } from './holidays/holidays.module.js';
 import { ModulesModule } from './modules/modules.module.js';
 import { OutboxModule } from './outbox/outbox.module.js';
@@ -28,6 +29,7 @@ import { UsersModule } from './users/users.module.js';
     PeriodsModule,
     OutboxModule,
     ModulesModule,
+    EnrollmentsModule,
     HolidaysModule,
     RoomsModule,
     RedisModule,

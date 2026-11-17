@@ -60,16 +60,7 @@ export class RoomsService {
 
   async update(id: string, dto: UpdateRoomDto) {
     const current = await this.findOrFail(id);
-    if (dto.capacity !== undefined) {
-      assertCapacity(dto.capacity);
-      // FR-021: never below the students already enrolled in a module that uses the room
-      const { maxEnrolled } = await this.usage.getRoomUsage(id);
-      if (dto.capacity < maxEnrolled) {
-        throw new AppException(409, 'ROOM_CAPACITY_BELOW_ENROLLED', 'Capacity is below the enrolled students', {
-          maxEnrolled,
-        });
-      }
-    }
+    if (dto.capacity !== undefined) assertCapacity(dto.capacity);
     const locationId = dto.locationId ?? current.locationId;
     if (dto.locationId && dto.locationId !== current.locationId) await this.assertLocation(locationId);
     const name = dto.name ?? current.name;
@@ -77,10 +68,24 @@ export class RoomsService {
       await this.assertNameFree(locationId, name, id);
     }
     try {
-      const updated = await this.prisma.room.update({
-        where: { id },
-        data: { locationId, name, capacity: dto.capacity },
-        include: { location: { select: { name: true } } },
+      const updated = await this.prisma.$transaction(async (tx) => {
+        if (dto.capacity !== undefined) {
+          // FR-021: never below the students already enrolled in a module that uses the room. The
+          // modules are locked (ordered by id) so an enrollment in flight finishes first and the
+          // count read here is the last one before the new capacity applies (spec 011, R-2).
+          await tx.$queryRaw`SELECT id FROM modules WHERE room_id = ${id}::uuid AND deleted_at IS NULL ORDER BY id FOR UPDATE`;
+          const { maxEnrolled } = await this.usage.getRoomUsage(id);
+          if (dto.capacity < maxEnrolled) {
+            throw new AppException(409, 'ROOM_CAPACITY_BELOW_ENROLLED', 'Capacity is below the enrolled students', {
+              maxEnrolled,
+            });
+          }
+        }
+        return tx.room.update({
+          where: { id },
+          data: { locationId, name, capacity: dto.capacity },
+          include: { location: { select: { name: true } } },
+        });
       });
       return toView(updated);
     } catch (error) {
