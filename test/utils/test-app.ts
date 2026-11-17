@@ -5,10 +5,16 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/app.setup.js';
 import { Clock } from '../../src/common/clock.js';
+import { AppException } from '../../src/common/errors/app.exception.js';
 import {
   ConfigUsageService,
   type RoomUsage,
 } from '../../src/config-usage/config-usage.service.js';
+import {
+  HOLIDAYS_CLIENT,
+  type HolidayEntry,
+  type HolidaysClient,
+} from '../../src/holidays/holidays-client.js';
 import { MailService, type MailJob } from '../../src/mail/mail.service.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { REDIS } from '../../src/redis/redis.module.js';
@@ -47,18 +53,49 @@ export class TestClock extends Clock {
   }
 }
 
-// Stands in for ConfigUsageService: tests set how much "use" modules and PQRS would report.
+// Stands in for ConfigUsageService. It delegates to the real service (modules are real rows) unless
+// a test fixes a value: `modulesInPeriod`, `roomUsage`, `itemsInUse`, or the enrolled students of a
+// module with `setEnrolled` (enrollments do not exist until spec 011).
 export class FakeConfigUsage extends ConfigUsageService {
-  modulesInPeriod = 0;
-  roomUsage: RoomUsage = { modulesInActivePeriod: 0, modulesInUpcomingPeriods: 0, maxEnrolled: 0 };
+  modulesInPeriod: number | null = null;
+  roomUsage: RoomUsage | null = null;
   itemsInUse = new Set<string>();
+  private readonly enrolled = new Map<string, number>();
+  private real!: ConfigUsageService;
+  private db!: PrismaService;
 
-  override countModulesInPeriod(_periodId: string) {
-    return Promise.resolve(this.modulesInPeriod);
+  constructor() {
+    super(null as never);
   }
 
-  override getRoomUsage(_roomId: string) {
-    return Promise.resolve(this.roomUsage);
+  attach(prisma: PrismaService) {
+    this.db = prisma;
+    this.real = new ConfigUsageService(prisma);
+  }
+
+  setEnrolled(moduleId: string, count: number) {
+    this.enrolled.set(moduleId, count);
+  }
+
+  override countModulesInPeriod(periodId: string) {
+    return this.modulesInPeriod === null
+      ? this.real.countModulesInPeriod(periodId)
+      : Promise.resolve(this.modulesInPeriod);
+  }
+
+  override async getRoomUsage(roomId: string) {
+    if (this.roomUsage) return this.roomUsage;
+    const usage = await this.real.getRoomUsage(roomId);
+    const modules = await this.db.module.findMany({
+      where: { roomId, deletedAt: null },
+      select: { id: true },
+    });
+    const maxEnrolled = Math.max(0, ...modules.map((m) => this.enrolled.get(m.id) ?? 0));
+    return { ...usage, maxEnrolled };
+  }
+
+  override countActiveEnrollments(moduleId: string) {
+    return Promise.resolve(this.enrolled.get(moduleId) ?? 0);
   }
 
   override isDropdownItemInUse(itemId: string) {
@@ -66,9 +103,36 @@ export class FakeConfigUsage extends ConfigUsageService {
   }
 
   reset() {
-    this.modulesInPeriod = 0;
-    this.roomUsage = { modulesInActivePeriod: 0, modulesInUpcomingPeriods: 0, maxEnrolled: 0 };
+    this.modulesInPeriod = null;
+    this.roomUsage = null;
+    this.enrolled.clear();
     this.itemsInUse.clear();
+  }
+}
+
+export type FakeHolidaysMode = 'ok' | 'unavailable';
+
+// Stands in for the holidays service of the import: `entries` is what the service "answers" and
+// `mode: 'unavailable'` makes it fail like a timeout or an invalid answer would.
+export class FakeHolidaysClient implements HolidaysClient {
+  mode: FakeHolidaysMode = 'ok';
+  entries: HolidayEntry[] = [];
+  readonly requestedYears: number[] = [];
+
+  fetchYear(year: number): Promise<HolidayEntry[]> {
+    this.requestedYears.push(year);
+    if (this.mode === 'unavailable') {
+      return Promise.reject(
+        new AppException(502, 'HOLIDAYS_IMPORT_UNAVAILABLE', 'The holidays service is unavailable'),
+      );
+    }
+    return Promise.resolve(this.entries.filter((e) => e.date.startsWith(`${year}-`)));
+  }
+
+  reset() {
+    this.mode = 'ok';
+    this.entries = [];
+    this.requestedYears.length = 0;
   }
 }
 
@@ -85,6 +149,7 @@ export interface TestContext {
   mailbox: FakeMailbox;
   clock: TestClock;
   usage: FakeConfigUsage;
+  holidays: FakeHolidaysClient;
   reset: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -93,6 +158,7 @@ export async function createTestApp(): Promise<TestContext> {
   const mailbox = new FakeMailbox();
   const clock = new TestClock();
   const usage = new FakeConfigUsage();
+  const holidays = new FakeHolidaysClient();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
     controllers: [RoleProbeController],
@@ -103,6 +169,8 @@ export async function createTestApp(): Promise<TestContext> {
     .useValue(clock)
     .overrideProvider(ConfigUsageService)
     .useValue(usage)
+    .overrideProvider(HOLIDAYS_CLIENT)
+    .useValue(holidays)
     .compile();
 
   const app = moduleRef.createNestApplication();
@@ -110,6 +178,7 @@ export async function createTestApp(): Promise<TestContext> {
   await app.init();
 
   const prisma = app.get(PrismaService);
+  usage.attach(prisma);
   const redis = app.get<Redis>(REDIS);
 
   const reset = async () => {
@@ -117,7 +186,7 @@ export async function createTestApp(): Promise<TestContext> {
       'TRUNCATE TABLE verification_codes, sessions, student_profiles, teacher_profiles, users, settings, smtp_configs CASCADE',
     );
     await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE rooms, locations, academic_periods CASCADE',
+      'TRUNCATE TABLE rooms, locations, academic_periods, holidays CASCADE',
     );
     await prisma.$executeRawUnsafe(
       `DELETE FROM dropdown_items WHERE id NOT IN (${PQRS_ITEM_IDS.map((id) => `'${id}'`).join(',')})`,
@@ -128,6 +197,7 @@ export async function createTestApp(): Promise<TestContext> {
          label_en = CASE right(id::text, 1) WHEN '1' THEN 'Request' WHEN '2' THEN 'Complaint' WHEN '3' THEN 'Claim' ELSE 'Suggestion' END`,
     );
     usage.reset();
+    holidays.reset();
     const keys = await redis.keys('login:*');
     if (keys.length) await redis.del(keys);
     mailbox.clear();
@@ -141,6 +211,7 @@ export async function createTestApp(): Promise<TestContext> {
     mailbox,
     clock,
     usage,
+    holidays,
     reset,
     close: () => app.close(),
   };
