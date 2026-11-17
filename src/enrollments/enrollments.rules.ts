@@ -29,3 +29,31 @@ export function findStudentConflict(target: readonly Slot[], mine: readonly OwnS
   }
   return null;
 }
+
+export type SessionBlockReason = 'WINDOW_PASSED' | 'PERIOD_CLOSED' | 'SESSION_CANCELLED' | 'NO_SEAT';
+
+export interface SessionActionInput {
+  enrolled: boolean; // the student has an ACTIVE enrollment in the module
+  readOnly: boolean; // the period is CLOSED
+  status: 'SCHEDULED' | 'RESCHEDULED' | 'CANCELLED';
+  startsAt: Date;
+  now: Date;
+  leadMinutes: number;
+  absent: boolean; // the student already skipped this session
+  freeSeats: number;
+}
+
+// The single rule behind `canCancel` / `canRestore` (detail) and the cancel / restore actions.
+export function sessionActions(input: SessionActionInput): {
+  canCancel: boolean;
+  canRestore: boolean;
+  blockReason: SessionBlockReason | null;
+} {
+  const none = (blockReason: SessionBlockReason | null) => ({ canCancel: false, canRestore: false, blockReason });
+  if (!input.enrolled) return none(null);
+  if (input.readOnly) return none('PERIOD_CLOSED');
+  if (input.status === 'CANCELLED') return none('SESSION_CANCELLED');
+  if (!canCancelSession(input.startsAt, input.now, input.leadMinutes)) return none('WINDOW_PASSED');
+  if (!input.absent) return { canCancel: true, canRestore: false, blockReason: null };
+  return input.freeSeats >= 1 ? { canCancel: false, canRestore: true, blockReason: null } : none('NO_SEAT');
+}

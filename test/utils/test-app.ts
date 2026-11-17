@@ -39,9 +39,15 @@ export class FakeMailbox {
 
 export class TestClock extends Clock {
   private offsetMs = 0;
+  private frozen: Date | null = null;
 
   override now() {
-    return new Date(Date.now() + this.offsetMs);
+    return this.frozen ? new Date(this.frozen) : new Date(Date.now() + this.offsetMs);
+  }
+
+  // Stops time at an exact instant (the 59, 60 and 61 minute windows need to be exact).
+  freezeAt(instant: Date) {
+    this.frozen = instant;
   }
 
   advance(ms: number) {
@@ -50,6 +56,7 @@ export class TestClock extends Clock {
 
   reset() {
     this.offsetMs = 0;
+    this.frozen = null;
   }
 }
 
