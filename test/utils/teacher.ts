@@ -10,7 +10,7 @@ export async function loginTeacher(ctx: TestContext) {
 
 export type Teacher = Awaited<ReturnType<typeof loginTeacher>>;
 
-export const teacherApi = (ctx: TestContext, teacher: Teacher) => {
+export const teacherApi = (ctx: TestContext, teacher: { token: string }) => {
   const call = (method: 'get' | 'post', url: string, body?: object) => {
     const req = ctx.http()[method](`/api/v1${url}`).set('Authorization', `Bearer ${teacher.token}`);
     return body ? req.send(body) : req;

@@ -1,4 +1,4 @@
-import { IsOptional, IsUUID, Matches } from 'class-validator';
+import { IsBoolean, IsIn, IsISO8601, IsOptional, IsUUID, Matches } from 'class-validator';
 import { PageQuery } from '../../common/page-query.js';
 
 export class TeacherModulesQueryDto extends PageQuery {}
@@ -17,4 +17,22 @@ export class TeacherSessionsQueryDto extends PageQuery {
   @IsOptional()
   @Matches(DAY)
   to?: string;
+}
+
+export const SCOPES = ['SESSION', 'SERIES'] as const;
+
+// SESSION: only the chosen session. SERIES: it and the future ones of the same weekly slot.
+export class ScopeDto {
+  @IsIn(SCOPES)
+  scope!: (typeof SCOPES)[number];
+}
+
+export class RescheduleDto extends ScopeDto {
+  // New start of the chosen session; the others of the series move the same amount.
+  @IsISO8601({ strict: true })
+  startsAt!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
 }

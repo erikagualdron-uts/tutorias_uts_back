@@ -4,6 +4,14 @@ import { activePeriod, moduleWithSessions } from './utils/enrollment.js';
 import { loginTeacher, teacherApi } from './utils/teacher.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
 
+interface Actions {
+  id: string;
+  canReschedule: boolean;
+  canCancel: boolean;
+  canRestore: boolean;
+  blockReason: string | null;
+}
+
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 
@@ -170,7 +178,7 @@ describe('teacher schedule: modules and sessions', () => {
         roomId: old.room.id,
         startsAt: new Date(now.getTime() + 7 * 24 * 60 * MIN),
       });
-      const by = Object.fromEntries(((await teacherApi(ctx, teacher).sessions()).body.data as { id: string }[]).map((s) => [s.id, s]));
+      const by = Object.fromEntries(((await teacherApi(ctx, teacher).sessions()).body.data as Actions[]).map((s) => [s.id, s]));
       expect(by[ok.id]).toMatchObject({ canReschedule: true, canCancel: true, canRestore: false, blockReason: null });
       expect(by[edge.id].canCancel).toBe(true);
       expect(by[near.id]).toMatchObject({ canReschedule: false, canCancel: false, blockReason: 'WINDOW_PASSED' });
