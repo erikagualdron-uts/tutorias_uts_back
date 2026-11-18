@@ -23,3 +23,19 @@ export async function lockModule(tx: Prisma.TransactionClient, id: string, perio
   if (!module) throw new AppException(404, 'NOT_FOUND', 'Module not found');
   return module;
 }
+
+// Fourth and fifth locks of a teacher change (spec 012, D-096): the rooms and then the teachers of the
+// sessions that move, each ordered by id, so two changes that touch the same room or teacher queue
+// instead of both passing the availability check.
+export async function lockRoomsAndTeachers(
+  tx: Prisma.TransactionClient,
+  roomIds: readonly string[],
+  teacherIds: readonly string[],
+) {
+  if (roomIds.length > 0) {
+    await tx.$queryRaw`SELECT id FROM rooms WHERE id = ANY(${[...roomIds]}::uuid[]) ORDER BY id FOR UPDATE`;
+  }
+  if (teacherIds.length > 0) {
+    await tx.$queryRaw`SELECT id FROM users WHERE id = ANY(${[...teacherIds]}::uuid[]) ORDER BY id FOR UPDATE`;
+  }
+}
