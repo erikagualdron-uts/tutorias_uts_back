@@ -1,0 +1,70 @@
+import { HttpException } from '@nestjs/common';
+
+// Stable codes from specs/001-auth-roles, 006-cae-configuration and 010-modules-sessions contracts; the app translates them.
+export const ERROR_CODES = [
+  'VALIDATION_FAILED',
+  'EMAIL_ALREADY_REGISTERED',
+  'EMAIL_DOMAIN_NOT_ALLOWED',
+  'CODE_INVALID',
+  'CODE_EXPIRED',
+  'CODE_ATTEMPTS_EXCEEDED',
+  'INVALID_CREDENTIALS',
+  'EMAIL_NOT_VERIFIED',
+  'ACCOUNT_DISABLED',
+  'ACCOUNT_UNAVAILABLE',
+  'SESSION_EXPIRED',
+  'SESSION_REVOKED',
+  'TOKEN_INVALID',
+  'PASSWORD_TOO_WEAK',
+  'PASSWORD_SAME_AS_CURRENT',
+  'PASSWORD_CHANGE_REQUIRED',
+  'FORBIDDEN_ROLE',
+  'RATE_LIMITED',
+  'PERIOD_NAME_TAKEN',
+  'PERIOD_DATES_INVALID',
+  'PERIOD_DATES_OVERLAP',
+  'PERIOD_ACTIVE_EXISTS',
+  'PERIOD_CLOSED_READ_ONLY',
+  'PERIOD_HAS_MODULES',
+  'PERIOD_NOT_UPCOMING',
+  'PERIOD_ALREADY_ENDED',
+  'PERIOD_NOT_ACTIVE',
+  'LOCATION_NAME_TAKEN',
+  'LOCATION_HAS_ACTIVE_ROOMS',
+  'ROOM_NAME_TAKEN',
+  'ROOM_CAPACITY_INVALID',
+  'ROOM_IN_ACTIVE_PERIOD',
+  'ROOM_CAPACITY_BELOW_ENROLLED',
+  'ROOM_INACTIVE_OR_DELETED',
+  'DROPDOWN_LABEL_REQUIRED',
+  'DROPDOWN_ITEM_IN_USE',
+  'DROPDOWN_ORDER_INVALID',
+  'MODULE_SCHEDULE_INVALID',
+  'MODULE_SCHEDULE_OUT_OF_HOURS',
+  'MODULE_SCHEDULE_SELF_OVERLAP',
+  'MODULE_TEACHER_CONFLICT',
+  'MODULE_ROOM_CONFLICT',
+  'MODULE_TEACHER_UNAVAILABLE',
+  'MODULE_ROOM_UNAVAILABLE',
+  'MODULE_ROOM_CAPACITY_BELOW_ENROLLED',
+  'MODULE_HAS_ENROLLMENTS',
+  'HOLIDAY_DATE_TAKEN',
+  'HOLIDAY_IN_PAST',
+  'HOLIDAYS_IMPORT_UNAVAILABLE',
+  'NOT_FOUND',
+  'INTERNAL_ERROR',
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export class AppException extends HttpException {
+  constructor(
+    status: number,
+    readonly code: ErrorCode,
+    // Developer-facing only: the app never shows it.
+    message: string,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message, status);
+  }
+}

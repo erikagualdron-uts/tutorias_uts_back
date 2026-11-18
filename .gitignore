@@ -22,3 +22,9 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Prisma schema copy synced from tutorias_uts_db
+/prisma/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

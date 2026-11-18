@@ -1,0 +1,106 @@
+import { Body, Controller, Get, HttpCode, Post, Req } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import {
+  CurrentAuth,
+  AllowPasswordChange,
+  Public,
+  type AuthContext,
+} from '../common/guards/decorators.js';
+import { AuthService } from './auth.service.js';
+import { ChangePasswordDto } from './dto/change-password.dto.js';
+import { LoginDto } from './dto/login.dto.js';
+import { RefreshDto } from './dto/refresh.dto.js';
+import {
+  EmailDto,
+  RegisterDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+} from './dto/registration.dto.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { RegistrationService } from './registration.service.js';
+
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly auth: AuthService,
+    private readonly registration: RegistrationService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
+
+  @Public()
+  @Post('register')
+  @HttpCode(202)
+  register(@Body() dto: RegisterDto) {
+    return this.registration.register(dto);
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(204)
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.registration.verify(dto);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(202)
+  resendVerification(@Body() dto: EmailDto) {
+    return this.registration.resend(dto.email);
+  }
+
+  @Public()
+  @Post('login')
+  @HttpCode(200)
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.auth.login(dto, req.ip ?? 'unknown');
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(202)
+  forgotPassword(@Body() dto: EmailDto) {
+    return this.passwordReset.forgot(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(204)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.passwordReset.reset(dto);
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body() dto: RefreshDto) {
+    return this.auth.refresh(dto.refreshToken);
+  }
+
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@CurrentAuth() { sessionId }: AuthContext) {
+    await this.auth.logout(sessionId);
+  }
+
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @Get('me')
+  me(@CurrentAuth() { user }: AuthContext) {
+    return this.auth.profileOf(user.id);
+  }
+
+  @ApiBearerAuth()
+  @AllowPasswordChange()
+  @Post('change-password')
+  @HttpCode(204)
+  changePassword(
+    @CurrentAuth() { user }: AuthContext,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.auth.changePassword(user, dto);
+  }
+}
