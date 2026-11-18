@@ -8,9 +8,8 @@ export interface RoomUsage {
 }
 
 // Answers "is this record used by something else?" for the configuration rules.
-// Modules exist since spec 010, so the module counts are real. Enrollments (spec 011) and PQRS
-// do not exist yet, so enrolled students count as zero and no dropdown item is in use until
-// those features replace these bodies; the rules that call them are already wired and tested.
+// Modules (spec 010) and enrollments (spec 011) are real. PQRS does not exist yet, so no dropdown
+// item is in use until it replaces that body; the rule that calls it is already wired and tested.
 @Injectable()
 export class ConfigUsageService {
   constructor(private readonly prisma: PrismaService) {}
@@ -28,12 +27,29 @@ export class ConfigUsageService {
       countIn('ACTIVE'),
       countIn('UPCOMING'),
     ]);
-    return { modulesInActivePeriod, modulesInUpcomingPeriods, maxEnrolled: 0 };
+    return { modulesInActivePeriod, modulesInUpcomingPeriods, maxEnrolled: await this.maxEnrolled(roomId) };
   }
 
-  // Active enrollments of a module. Zero until the enrollment feature (spec 011) exists.
-  countActiveEnrollments(_moduleId: string): Promise<number> {
-    return Promise.resolve(0);
+  // Largest number of active enrollments among the live modules of a room in a period not closed.
+  private async maxEnrolled(roomId: string): Promise<number> {
+    const rows = await this.prisma.$queryRaw<{ max: bigint | null }[]>`
+      SELECT MAX(total) AS max FROM (
+        SELECT COUNT(*) AS total
+        FROM modules m
+        JOIN academic_periods p ON p.id = m.period_id AND p.status <> 'CLOSED' AND p.deleted_at IS NULL
+        JOIN enrollments e ON e.module_id = m.id AND e.status = 'ACTIVE' AND e.deleted_at IS NULL
+        JOIN users u ON u.id = e.student_id AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
+        WHERE m.room_id = ${roomId}::uuid AND m.deleted_at IS NULL
+        GROUP BY m.id
+      ) per_module`;
+    return Number(rows[0]?.max ?? 0);
+  }
+
+  // Active enrollments of a module whose student account is active and not deleted (FR-015).
+  countActiveEnrollments(moduleId: string): Promise<number> {
+    return this.prisma.enrollment.count({
+      where: { moduleId, status: 'ACTIVE', deletedAt: null, student: { status: 'ACTIVE', deletedAt: null } },
+    });
   }
 
   isDropdownItemInUse(_itemId: string): Promise<boolean> {

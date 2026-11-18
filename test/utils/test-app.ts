@@ -39,9 +39,15 @@ export class FakeMailbox {
 
 export class TestClock extends Clock {
   private offsetMs = 0;
+  private frozen: Date | null = null;
 
   override now() {
-    return new Date(Date.now() + this.offsetMs);
+    return this.frozen ? new Date(this.frozen) : new Date(Date.now() + this.offsetMs);
+  }
+
+  // Stops time at an exact instant (the 59, 60 and 61 minute windows need to be exact).
+  freezeAt(instant: Date) {
+    this.frozen = instant;
   }
 
   advance(ms: number) {
@@ -50,12 +56,13 @@ export class TestClock extends Clock {
 
   reset() {
     this.offsetMs = 0;
+    this.frozen = null;
   }
 }
 
 // Stands in for ConfigUsageService. It delegates to the real service (modules are real rows) unless
 // a test fixes a value: `modulesInPeriod`, `roomUsage`, `itemsInUse`, or the enrolled students of a
-// module with `setEnrolled` (enrollments do not exist until spec 011).
+// module with `setEnrolled`; otherwise the real enrollments are counted.
 export class FakeConfigUsage extends ConfigUsageService {
   modulesInPeriod: number | null = null;
   roomUsage: RoomUsage | null = null;
@@ -90,12 +97,13 @@ export class FakeConfigUsage extends ConfigUsageService {
       where: { roomId, deletedAt: null },
       select: { id: true },
     });
-    const maxEnrolled = Math.max(0, ...modules.map((m) => this.enrolled.get(m.id) ?? 0));
-    return { ...usage, maxEnrolled };
+    const counts = await Promise.all(modules.map((m) => this.countActiveEnrollments(m.id)));
+    return { ...usage, maxEnrolled: Math.max(usage.maxEnrolled, ...counts) };
   }
 
   override countActiveEnrollments(moduleId: string) {
-    return Promise.resolve(this.enrolled.get(moduleId) ?? 0);
+    const fixed = this.enrolled.get(moduleId);
+    return fixed === undefined ? this.real.countActiveEnrollments(moduleId) : Promise.resolve(fixed);
   }
 
   override isDropdownItemInUse(itemId: string) {

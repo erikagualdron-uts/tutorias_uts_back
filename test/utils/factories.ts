@@ -198,3 +198,54 @@ export function createHoliday(
     },
   });
 }
+
+export async function createStudent(
+  prisma: PrismaService,
+  overrides: UserOverrides & { firstName?: string; lastName?: string } = {},
+) {
+  const user = await createUser(prisma, { ...overrides, role: 'STUDENT' });
+  await prisma.studentProfile.create({
+    data: {
+      userId: user.id,
+      firstName: overrides.firstName ?? 'Estudiante',
+      lastName: overrides.lastName ?? `Prueba ${nextId()}`,
+    },
+  });
+  return user;
+}
+
+export function createEnrollment(
+  prisma: PrismaService,
+  overrides: {
+    studentId: string;
+    moduleId: string;
+    status?: 'ACTIVE' | 'CANCELLED';
+    cancelledAt?: Date;
+    effectiveUntil?: Date;
+  },
+) {
+  const cancelled = overrides.status === 'CANCELLED';
+  const cancelledAt = overrides.cancelledAt ?? (cancelled ? new Date() : null);
+  return prisma.enrollment.create({
+    data: {
+      studentId: overrides.studentId,
+      moduleId: overrides.moduleId,
+      status: overrides.status ?? 'ACTIVE',
+      cancelledAt,
+      effectiveUntil: overrides.effectiveUntil ?? (cancelled ? cancelledAt : null),
+    },
+  });
+}
+
+export function createAbsence(
+  prisma: PrismaService,
+  overrides: { enrollmentId: string; sessionId: string; deletedAt?: Date | null },
+) {
+  return prisma.sessionAbsence.create({
+    data: {
+      enrollmentId: overrides.enrollmentId,
+      sessionId: overrides.sessionId,
+      deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}

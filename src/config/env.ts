@@ -19,6 +19,7 @@ export interface Env {
   HOLIDAYS_TIMEOUT_MS: number;
   MODULE_EARLIEST_MINUTE: number;
   MODULE_LATEST_MINUTE: number;
+  STUDENT_CANCEL_LEAD_MINUTES: number;
 }
 
 const required = [
@@ -66,6 +67,11 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
   if (earliest >= latest)
     throw new Error('MODULE_EARLIEST_TIME must be before MODULE_LATEST_TIME');
 
+  // How long before a session a student may still cancel it (minutes).
+  const cancelLead = num('STUDENT_CANCEL_LEAD_MINUTES', 60);
+  if (!Number.isInteger(cancelLead) || cancelLead <= 0)
+    throw new Error('STUDENT_CANCEL_LEAD_MINUTES must be a positive integer');
+
   return {
     PORT: num('PORT', 3000),
     DATABASE_URL: str('DATABASE_URL'),
@@ -87,5 +93,6 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     HOLIDAYS_TIMEOUT_MS: holidaysTimeoutMs,
     MODULE_EARLIEST_MINUTE: earliest,
     MODULE_LATEST_MINUTE: latest,
+    STUDENT_CANCEL_LEAD_MINUTES: cancelLead,
   };
 }

@@ -16,6 +16,7 @@ import type {
   ReplaceSchedulesDto,
   UpdateModuleDto,
 } from './dto/module.dto.js';
+import { lockModule, lockWritablePeriod } from './locks.js';
 import { SchedulesService } from './schedules.service.js';
 import { SessionsGenerator } from './sessions.generator.js';
 import { bogotaToUtc, dayKey, formatTime, isoWeekday } from './sessions.rules.js';
@@ -118,7 +119,7 @@ export class ModulesService {
     await this.periods.closeExpired();
     try {
       const created = await this.prisma.$transaction(async (tx) => {
-        const period = await this.lockWritablePeriod(tx, dto.periodId);
+        const period = await lockWritablePeriod(tx, dto.periodId);
         await this.assertTeacher(tx, dto.teacherId);
         await this.assertRoom(tx, dto.roomId);
         await this.schedules.assertFree(tx, availability);
@@ -258,7 +259,7 @@ export class ModulesService {
     await this.periods.closeExpired();
     const current = await this.findLive(id);
     await this.prisma.$transaction(async (tx) => {
-      await this.lockModule(tx, id, current.periodId);
+      await lockModule(tx, id, current.periodId);
       await tx.module.update({
         where: { id },
         data: { name: dto.name, ...(dto.description !== undefined && { description: dto.description || null }) },
@@ -281,7 +282,7 @@ export class ModulesService {
     };
     try {
       const generated = await this.prisma.$transaction(async (tx) => {
-        await this.lockModule(tx, id, current.periodId);
+        await lockModule(tx, id, current.periodId);
         await this.assertNoEnrollments(id);
         await this.schedules.assertFree(tx, availability);
         const now = this.clock.now();
@@ -319,7 +320,7 @@ export class ModulesService {
     await this.periods.closeExpired();
     const current = await this.findLive(id);
     await this.prisma.$transaction(async (tx) => {
-      await this.lockModule(tx, id, current.periodId);
+      await lockModule(tx, id, current.periodId);
       await this.assertNoEnrollments(id);
       const deletedAt = this.clock.now();
       await tx.module.update({ where: { id }, data: { deletedAt } });
@@ -346,7 +347,7 @@ export class ModulesService {
     const field = kind === 'room' ? 'roomId' : 'teacherId';
     try {
       await this.prisma.$transaction(async (tx) => {
-        const module = await this.lockModule(tx, id, current.periodId);
+        const module = await lockModule(tx, id, current.periodId);
         if (module[field] === targetId) return;
         const enrolled = await this.usage.countActiveEnrollments(id);
         if (kind === 'room') {
@@ -384,16 +385,6 @@ export class ModulesService {
       throw await this.schedules.translate(error, availability);
     }
     return this.detail(id);
-  }
-
-  // Shared lock on the period, then an exclusive one on the module (a concurrent enrollment locks
-  // the same row, so the enrolled count read afterwards cannot change under this transaction).
-  private async lockModule(tx: Prisma.TransactionClient, id: string, periodId: string) {
-    await this.lockWritablePeriod(tx, periodId);
-    await tx.$queryRaw`SELECT id FROM modules WHERE id = ${id}::uuid FOR UPDATE`;
-    const module = await tx.module.findFirst({ where: { id, deletedAt: null } });
-    if (!module) throw new AppException(404, 'NOT_FOUND', 'Module not found');
-    return module;
   }
 
   private async assertNoEnrollments(moduleId: string) {
@@ -439,19 +430,6 @@ export class ModulesService {
         orderBy: { startsOn: 'asc' },
       }));
     return period?.id;
-  }
-
-  // Shared lock on the period row (research.md R-2): a close that arrives meanwhile waits for this
-  // transaction, and one that already happened is seen here as CLOSED.
-  private async lockWritablePeriod(tx: Prisma.TransactionClient, periodId: string) {
-    const locked = await tx.$queryRaw<{ id: string }[]>`
-      SELECT id FROM academic_periods WHERE id = ${periodId}::uuid AND deleted_at IS NULL FOR SHARE`;
-    if (locked.length === 0) throw new AppException(404, 'NOT_FOUND', 'Period not found');
-    const period = await tx.academicPeriod.findUniqueOrThrow({ where: { id: periodId } });
-    if (period.status === 'CLOSED') {
-      throw new AppException(409, 'PERIOD_CLOSED_READ_ONLY', 'A closed period is read-only');
-    }
-    return period;
   }
 
   private async assertTeacher(tx: Prisma.TransactionClient, teacherId: string) {
