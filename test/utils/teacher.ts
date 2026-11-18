@@ -17,6 +17,7 @@ export const teacherApi = (ctx: TestContext, teacher: { token: string }) => {
   };
   return {
     modules: (query = '') => call('get', `/teacher/modules${query}`),
+    calendar: (query = '') => call('get', `/teacher/calendar${query}`),
     sessions: (query = '') => call('get', `/teacher/sessions${query}`),
     reschedule: (id: string, body: object) => call('post', `/teacher/sessions/${id}/reschedule`, body),
     cancel: (id: string, body: object) => call('post', `/teacher/sessions/${id}/cancel`, body),

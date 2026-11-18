@@ -7,10 +7,15 @@ import type { Env } from '../config/env.js';
 import { ConfigUsageService } from '../config-usage/config-usage.service.js';
 import { sessionSeats } from '../enrollments/seats.js';
 import { bogotaToUtc, formatTime } from '../modules/sessions.rules.js';
-import { parseCalendarDay } from '../periods/periods.rules.js';
+import { formatCalendarDay, parseCalendarDay } from '../periods/periods.rules.js';
 import { PeriodsService } from '../periods/periods.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { TeacherModulesQueryDto, TeacherSessionsQueryDto } from './dto/teacher-sessions.dto.js';
+import { parseCalendarRange, pickCalendarPeriod } from './calendar.rules.js';
+import type {
+  TeacherCalendarQueryDto,
+  TeacherModulesQueryDto,
+  TeacherSessionsQueryDto,
+} from './dto/teacher-sessions.dto.js';
 import { sessionChangeActions } from './teacher-sessions.rules.js';
 
 const DAY_MS = 86_400_000;
@@ -122,6 +127,50 @@ export class TeacherScheduleService {
     };
   }
 
+  // The sessions of the teacher in a range of days (a week for the calendar), past ones included. It shows
+  // the active period or, without one, the last closed period read only (spec 013, research R-2).
+  async calendar(teacherId: string, query: TeacherCalendarQueryDto) {
+    const { from, to } = parseCalendarRange(query.from, query.to);
+    await this.periods.closeExpired();
+    const [active, closed] = await Promise.all([
+      this.prisma.academicPeriod.findFirst({ where: { status: 'ACTIVE', deletedAt: null } }),
+      this.prisma.academicPeriod.findFirst({
+        where: { status: 'CLOSED', deletedAt: null },
+        orderBy: [{ endsOn: 'desc' }, { id: 'asc' }],
+      }),
+    ]);
+    const period = pickCalendarPeriod(active, closed);
+    const meta = {
+      from: query.from,
+      to: query.to,
+      period: period && {
+        id: period.id,
+        name: period.name,
+        startsOn: formatCalendarDay(period.startsOn),
+        endsOn: formatCalendarDay(period.endsOn),
+        status: period.status as 'ACTIVE' | 'CLOSED',
+      },
+      hours: {
+        earliest: formatTime(this.config.get('MODULE_EARLIEST_MINUTE', { infer: true })),
+        latest: formatTime(this.config.get('MODULE_LATEST_MINUTE', { infer: true })),
+      },
+      changeLeadMinutes: this.leadMinutes,
+    };
+    if (!period) return { data: [], meta };
+    const range = { from: bogotaToUtc(from, 0), to: bogotaToUtc(new Date(to.getTime() + DAY_MS), 0) };
+    const rows = await this.prisma.moduleSession.findMany({
+      where: {
+        teacherId,
+        deletedAt: null,
+        module: { deletedAt: null, periodId: period.id },
+        startsAt: { gte: range.from, lt: range.to },
+      },
+      include: SESSION_INCLUDE,
+      orderBy: [{ startsAt: 'asc' }, { id: 'asc' }],
+    });
+    return { data: await this.views(rows, this.clock.now(), range), meta };
+  }
+
   // The sessions of the teacher by id, in the order of `ids`, for the answer of a change.
   async byIds(teacherId: string, ids: readonly string[]) {
     const rows = await this.prisma.moduleSession.findMany({
@@ -139,9 +188,9 @@ export class TeacherScheduleService {
       : { id: '', name: '', location: '', capacity: 0 };
   }
 
-  private async views(rows: SessionRow[], now: Date) {
+  private async views(rows: SessionRow[], now: Date, range?: { from: Date; to: Date }) {
     const [seats, rooms] = await Promise.all([
-      sessionSeats(this.prisma, [...new Set(rows.map((r) => r.moduleId))], now),
+      sessionSeats(this.prisma, [...new Set(rows.map((r) => r.moduleId))], now, range),
       this.prisma.room.findMany({
         where: { id: { in: [...new Set(rows.map((r) => r.roomId))] } },
         include: { location: true },

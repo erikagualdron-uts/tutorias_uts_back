@@ -25,8 +25,17 @@ export interface SessionSeats {
 // Seats per future session (research.md R-1) for several modules in one query. Attendees are the
 // distinct active students of the module with an ACTIVE enrollment, or a CANCELLED one whose
 // effective_until is after the session starts, who have not skipped that session.
-export async function sessionSeats(db: Db, moduleIds: readonly string[], now: Date): Promise<SessionSeats[]> {
+// `range` (a calendar week, past included) replaces the default "from now on" window.
+export async function sessionSeats(
+  db: Db,
+  moduleIds: readonly string[],
+  now: Date,
+  range?: { from: Date; to: Date },
+): Promise<SessionSeats[]> {
   if (moduleIds.length === 0) return [];
+  const window = range
+    ? Prisma.sql`s.starts_at >= ${range.from} AND s.starts_at < ${range.to}`
+    : Prisma.sql`s.starts_at > ${now}`;
   const rows = await db.$queryRaw<
     { sessionId: string; moduleId: string; startsAt: Date; capacity: number; attendees: number }[]
   >`
@@ -42,7 +51,7 @@ export async function sessionSeats(db: Db, moduleIds: readonly string[], now: Da
     JOIN rooms r ON r.id = s.room_id
     WHERE s.module_id = ANY(${[...moduleIds]}::uuid[])
       AND s.deleted_at IS NULL
-      AND s.starts_at > ${now}
+      AND ${window}
       AND s.status IN ('SCHEDULED', 'RESCHEDULED')
     ORDER BY s.starts_at`;
   return rows.map((row) => ({ ...row, freeSeats: Math.max(0, row.capacity - row.attendees) }));
