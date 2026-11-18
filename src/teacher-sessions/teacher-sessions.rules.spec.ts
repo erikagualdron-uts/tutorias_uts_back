@@ -22,6 +22,14 @@ describe('change window', () => {
   });
 });
 
+describe('configurable lead time', () => {
+  it('uses the minutes it is given, not a fixed 120', () => {
+    expect(canChangeSession(at(90), now, 90)).toBe(true);
+    expect(canChangeSession(at(89), now, 90)).toBe(false);
+    expect(canChangeSession(at(119), now, 60)).toBe(true);
+  });
+});
+
 describe('bogotaWeek', () => {
   it('runs from Monday 00:00 to the next Monday 00:00 in Bogota', () => {
     // 2030-01-08 is a Tuesday
