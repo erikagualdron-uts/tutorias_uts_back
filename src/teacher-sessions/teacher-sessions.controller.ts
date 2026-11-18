@@ -1,7 +1,13 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, Roles, type AuthContext } from '../common/guards/decorators.js';
-import { RescheduleDto, ScopeDto, TeacherModulesQueryDto, TeacherSessionsQueryDto } from './dto/teacher-sessions.dto.js';
+import {
+  RescheduleDto,
+  ScopeDto,
+  TeacherCalendarQueryDto,
+  TeacherModulesQueryDto,
+  TeacherSessionsQueryDto,
+} from './dto/teacher-sessions.dto.js';
 import { TeacherScheduleService } from './teacher-schedule.service.js';
 import { TeacherSessionsService } from './teacher-sessions.service.js';
 
@@ -24,6 +30,12 @@ export class TeacherSessionsController {
   @Get('sessions')
   sessions(@CurrentAuth() { user }: AuthContext, @Query() query: TeacherSessionsQueryDto) {
     return this.schedule.sessions(user.id, query);
+  }
+
+  // Sessions of one week (past and future, any state) for the calendar; the teacher is the token's user.
+  @Get('calendar')
+  calendar(@CurrentAuth() { user }: AuthContext, @Query() query: TeacherCalendarQueryDto) {
+    return this.schedule.calendar(user.id, query);
   }
 
   @Post('sessions/:id/reschedule')

@@ -19,6 +19,15 @@ export class TeacherSessionsQueryDto extends PageQuery {
   to?: string;
 }
 
+// Both days are required (Bogota calendar days, inclusive); the range rules live in calendar.rules.ts.
+export class TeacherCalendarQueryDto {
+  @Matches(DAY)
+  from!: string;
+
+  @Matches(DAY)
+  to!: string;
+}
+
 export const SCOPES = ['SESSION', 'SERIES'] as const;
 
 // SESSION: only the chosen session. SERIES: it and the future ones of the same weekly slot.
