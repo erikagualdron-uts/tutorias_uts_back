@@ -1,7 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, Roles, type AuthContext } from '../common/guards/decorators.js';
-import { RescheduleDto, TeacherModulesQueryDto, TeacherSessionsQueryDto } from './dto/teacher-sessions.dto.js';
+import { RescheduleDto, ScopeDto, TeacherModulesQueryDto, TeacherSessionsQueryDto } from './dto/teacher-sessions.dto.js';
 import { TeacherScheduleService } from './teacher-schedule.service.js';
 import { TeacherSessionsService } from './teacher-sessions.service.js';
 
@@ -34,5 +34,17 @@ export class TeacherSessionsController {
     @Body() dto: RescheduleDto,
   ) {
     return this.changes.reschedule(user.id, id, dto);
+  }
+
+  @Post('sessions/:id/cancel')
+  @HttpCode(200)
+  cancel(@CurrentAuth() { user }: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ScopeDto) {
+    return this.changes.cancel(user.id, id, dto);
+  }
+
+  @Post('sessions/:id/restore')
+  @HttpCode(200)
+  restore(@CurrentAuth() { user }: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ScopeDto) {
+    return this.changes.restore(user.id, id, dto);
   }
 }

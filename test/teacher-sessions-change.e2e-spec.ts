@@ -330,6 +330,209 @@ describe('teacher sessions: reschedule', () => {
     });
   });
 
+  describe('cancel', () => {
+    const cancelEvents = () => ctx.prisma.outboxEvent.findMany({ where: { type: 'SESSION_CANCELLED_TEACHER' } });
+
+    it.each([
+      [121, 200],
+      [120, 200],
+      [119, 409],
+    ])('a session %i minutes away answers %i', async (minutes, status) => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const first = m.sessions[0][0];
+      ctx.clock.freezeAt(new Date(first.startsAt.getTime() - minutes * MIN));
+      const res = await teacherApi(ctx, m.teacher).cancel(first.id, { scope: 'SESSION' });
+      expect(res.status).toBe(status);
+      if (status === 409) {
+        expect(res.body).toMatchObject({ code: 'SESSION_CHANGE_WINDOW_PASSED', details: { minutes: 120 } });
+        expect((await state(first.id)).status).toBe('SCHEDULED');
+        expect(await cancelEvents()).toHaveLength(0);
+      } else {
+        expect(await state(first.id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'TEACHER' });
+      }
+    });
+
+    it('SESSION cancels only the chosen one; SERIES it and the future ones of its slot, not holiday ones or another slot', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id, { slots: [{ dayOfWeek: 2, startMinute: 840, endMinute: 960 }, THU] });
+      const tuesdays = m.sessions[0];
+      const api = teacherApi(ctx, m.teacher);
+      await api.cancel(tuesdays[0].id, { scope: 'SESSION' });
+      expect((await state(tuesdays[1].id)).status).toBe('SCHEDULED');
+      await ctx.prisma.moduleSession.update({ where: { id: tuesdays[3].id }, data: { status: 'CANCELLED', cancelReason: 'HOLIDAY' } });
+      const res = await api.cancel(tuesdays[1].id, { scope: 'SERIES' });
+      expect(res.status).toBe(200);
+      expect(res.body.sessions.map((x: { id: string }) => x.id)).toEqual([tuesdays[1].id, tuesdays[2].id]);
+      expect(await state(tuesdays[2].id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'TEACHER' });
+      expect(await state(tuesdays[3].id)).toMatchObject({ cancelReason: 'HOLIDAY' });
+      for (const t of m.sessions[1]) expect((await state(t.id)).status).toBe('SCHEDULED');
+      expect(await ctx.prisma.moduleSession.count({ where: { moduleId: m.module.id } })).toBe(8);
+    });
+
+    it('frees the seat and the cruces: the students see it cancelled with no actions and it no longer counts', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const student = await loginStudent(ctx);
+      const enrollment = await createEnrollment(ctx.prisma, { studentId: student.user.id, moduleId: m.module.id });
+      await teacherApi(ctx, m.teacher).cancel(m.sessions[0][0].id, { scope: 'SESSION' });
+      const detail = await studentApi(ctx, student).detail(m.module.id);
+      const session = (detail.body.sessions as { id: string; status: string; cancelReason: string; canCancel: boolean; canRestore: boolean }[]).find((x) => x.id === m.sessions[0][0].id)!;
+      expect(session).toMatchObject({ status: 'CANCELLED', cancelReason: 'TEACHER', canCancel: false, canRestore: false });
+      expect((await studentApi(ctx, student).cancelSession(enrollment.id, session.id)).status).toBe(409);
+    });
+
+    it('refuses a session already cancelled, a past one and a closed period', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const api = teacherApi(ctx, m.teacher);
+      const [s0, s1, s2] = m.sessions[0];
+      await api.cancel(s1.id, { scope: 'SESSION' });
+      const again = await api.cancel(s1.id, { scope: 'SESSION' });
+      expect(again.body).toMatchObject({ code: 'SESSION_NOT_CHANGEABLE', details: { reason: 'CANCELLED' } });
+      ctx.clock.freezeAt(new Date(s0.startsAt.getTime() + 10 * MIN));
+      expect((await api.cancel(s0.id, { scope: 'SESSION' })).body).toMatchObject({ code: 'SESSION_NOT_CHANGEABLE', details: { reason: 'PAST' } });
+      ctx.clock.freezeAt(new Date('2030-01-07T12:00:00Z'));
+      await ctx.prisma.academicPeriod.update({ where: { id: period.id }, data: { status: 'CLOSED' } });
+      const closed = await api.cancel(s2.id, { scope: 'SESSION' });
+      expect(closed.status).toBe(409);
+      expect(closed.body.code).toBe('PERIOD_CLOSED_READ_ONLY');
+    });
+
+    it('answers 404 for another teacher and 400 for a bad scope', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const stranger = await loginTeacher(ctx);
+      expect((await teacherApi(ctx, stranger).cancel(m.sessions[0][0].id, { scope: 'SESSION' })).status).toBe(404);
+      expect((await teacherApi(ctx, m.teacher).cancel(m.sessions[0][0].id, { scope: 'ALL' })).status).toBe(400);
+      expect((await teacherApi(ctx, m.teacher).cancel(m.sessions[0][0].id, {})).status).toBe(400);
+    });
+  });
+
+  describe('restore', () => {
+    const restoredEvents = () => ctx.prisma.outboxEvent.findMany({ where: { type: 'SESSION_RESTORED_TEACHER' } });
+
+    it('gives back a cancelled session as SCHEDULED, or RESCHEDULED if it had been moved', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const api = teacherApi(ctx, m.teacher);
+      const [s0, s1] = m.sessions[0];
+      await api.cancel(s0.id, { scope: 'SESSION' });
+      const back = await api.restore(s0.id, { scope: 'SESSION' });
+      expect(back.status).toBe(200);
+      expect(await state(s0.id)).toMatchObject({ status: 'SCHEDULED', cancelReason: null });
+      await api.reschedule(s1.id, { scope: 'SESSION', startsAt: wednesday(1).toISOString() });
+      await api.cancel(s1.id, { scope: 'SESSION' });
+      await api.restore(s1.id, { scope: 'SESSION' });
+      expect(await state(s1.id)).toMatchObject({ status: 'RESCHEDULED', cancelReason: null });
+      expect(await restoredEvents()).toHaveLength(2);
+    });
+
+    it('SERIES gives back what the teacher cancelled in the slot and leaves the rest', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const api = teacherApi(ctx, m.teacher);
+      const sessions = m.sessions[0];
+      await api.cancel(sessions[0].id, { scope: 'SERIES' });
+      await ctx.prisma.moduleSession.update({ where: { id: sessions[3].id }, data: { cancelReason: 'HOLIDAY' } });
+      const res = await api.restore(sessions[1].id, { scope: 'SERIES' });
+      expect(res.status).toBe(200);
+      expect(res.body.sessions.map((x: { id: string }) => x.id)).toEqual([sessions[1].id, sessions[2].id]);
+      expect((await state(sessions[0].id)).status).toBe('CANCELLED');
+      expect((await state(sessions[1].id)).status).toBe('SCHEDULED');
+      expect(await state(sessions[3].id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'HOLIDAY' });
+    });
+
+    it('is refused at 119 minutes and accepted at 120', async () => {
+      const period = await start(ctx);
+      const m = await seriesModule(ctx, period.id);
+      const api = teacherApi(ctx, m.teacher);
+      const s = m.sessions[0][0];
+      await api.cancel(s.id, { scope: 'SESSION' });
+      ctx.clock.freezeAt(new Date(s.startsAt.getTime() - 119 * MIN));
+      const late = await api.restore(s.id, { scope: 'SESSION' });
+      expect(late.body).toMatchObject({ code: 'SESSION_CHANGE_WINDOW_PASSED', details: { minutes: 120 } });
+      ctx.clock.freezeAt(new Date(s.startsAt.getTime() - 120 * MIN));
+      expect((await api.restore(s.id, { scope: 'SESSION' })).status).toBe(200);
+    });
+
+    it('checks the room and the teacher again, and the students', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id, { weeks: 1 });
+      const api = teacherApi(ctx, a.teacher);
+      await api.cancel(a.sessions[0][0].id, { scope: 'SESSION' });
+      // while it was cancelled, another module took the room at the same hour
+      await seriesModule(ctx, period.id, { roomId: a.room.id, slots: [{ dayOfWeek: 3, startMinute: 840, endMinute: 960 }], weeks: 1 });
+      await ctx.prisma.moduleSession.updateMany({ where: { roomId: a.room.id, moduleId: { not: a.module.id } }, data: { startsAt: a.sessions[0][0].startsAt, endsAt: a.sessions[0][0].endsAt, originalStartsAt: a.sessions[0][0].startsAt } });
+      const room = await api.restore(a.sessions[0][0].id, { scope: 'SESSION' });
+      expect(room.status).toBe(409);
+      expect(room.body.code).toBe('MODULE_ROOM_CONFLICT');
+      expect((await state(a.sessions[0][0].id)).status).toBe('CANCELLED');
+      expect(await restoredEvents()).toHaveLength(0);
+    });
+
+    it('refuses when an enrolled student now has another session then', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id, { weeks: 1 });
+      const d = await seriesModule(ctx, period.id, { name: 'D', slots: [{ dayOfWeek: 3, startMinute: 840, endMinute: 960 }], weeks: 1 });
+      await ctx.prisma.moduleSession.updateMany({ where: { moduleId: d.module.id }, data: { startsAt: a.sessions[0][0].startsAt, endsAt: a.sessions[0][0].endsAt, originalStartsAt: a.sessions[0][0].startsAt } });
+      const [{ student }] = await enrollStudents(ctx, a.module.id, 1);
+      const api = teacherApi(ctx, a.teacher);
+      await api.cancel(a.sessions[0][0].id, { scope: 'SESSION' });
+      await createEnrollment(ctx.prisma, { studentId: student.id, moduleId: d.module.id });
+      const res = await api.restore(a.sessions[0][0].id, { scope: 'SESSION' });
+      expect(res.status).toBe(409);
+      expect(res.body).toMatchObject({ code: 'SESSION_STUDENT_CONFLICT', details: { students: 1 } });
+    });
+
+    it('does not restore a session on a day that became a holiday', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id, { weeks: 1 });
+      const api = teacherApi(ctx, a.teacher);
+      await api.cancel(a.sessions[0][0].id, { scope: 'SESSION' });
+      await createHoliday(ctx.prisma, { date: '2030-01-08' });
+      const res = await api.restore(a.sessions[0][0].id, { scope: 'SESSION' });
+      expect(res.status).toBe(422);
+      expect(res.body).toMatchObject({ code: 'SESSION_RESCHEDULE_INVALID_DATE', details: { reason: 'HOLIDAY', date: '2030-01-08' } });
+    });
+
+    it('does not restore what a holiday cancelled or what is not cancelled', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id);
+      const api = teacherApi(ctx, a.teacher);
+      const [s0, s1] = a.sessions[0];
+      await ctx.prisma.moduleSession.update({ where: { id: s0.id }, data: { status: 'CANCELLED', cancelReason: 'HOLIDAY' } });
+      expect((await api.restore(s0.id, { scope: 'SESSION' })).body).toMatchObject({ code: 'SESSION_NOT_CHANGEABLE', details: { reason: 'CANCELLED_BY_OTHER' } });
+      expect((await api.restore(s1.id, { scope: 'SESSION' })).body).toMatchObject({ code: 'SESSION_NOT_CHANGEABLE', details: { reason: 'NOT_CANCELLED' } });
+    });
+
+    it('does not touch enrollments or absences, and answers 404 for another teacher', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id);
+      const [{ enrollment }] = await enrollStudents(ctx, a.module.id, 1);
+      await createAbsence(ctx.prisma, { enrollmentId: enrollment.id, sessionId: a.sessions[0][0].id });
+      const api = teacherApi(ctx, a.teacher);
+      await api.cancel(a.sessions[0][0].id, { scope: 'SESSION' });
+      await api.restore(a.sessions[0][0].id, { scope: 'SESSION' });
+      expect(await ctx.prisma.sessionAbsence.count({ where: { deletedAt: null } })).toBe(1);
+      expect((await ctx.prisma.enrollment.findUniqueOrThrow({ where: { id: enrollment.id } })).status).toBe('ACTIVE');
+      const stranger = await loginTeacher(ctx);
+      expect((await teacherApi(ctx, stranger).restore(a.sessions[0][0].id, { scope: 'SESSION' })).status).toBe(404);
+    });
+
+    it('lets the CAE see the reason in the list of sessions of the module', async () => {
+      const period = await start(ctx);
+      const a = await seriesModule(ctx, period.id);
+      await teacherApi(ctx, a.teacher).cancel(a.sessions[0][0].id, { scope: 'SESSION' });
+      const { createUser, TEST_PASSWORD } = await import('./utils/factories.js');
+      const admin = await createUser(ctx.prisma, { role: 'SUPERADMIN' });
+      const login = await ctx.http().post('/api/v1/auth/login').send({ email: admin.email, password: TEST_PASSWORD });
+      const list = await ctx.http().get(`/api/v1/modules/${a.module.id}/sessions`).set('Authorization', `Bearer ${login.body.accessToken as string}`);
+      expect(list.status).toBe(200);
+      expect(list.body.data.find((x: { id: string }) => x.id === a.sessions[0][0].id)).toMatchObject({ status: 'CANCELLED', cancelReason: 'TEACHER' });
+    });
+  });
+
   it('keeps the helpers honest', async () => {
     expect(createSession).toBeDefined();
     expect(createStudent).toBeDefined();

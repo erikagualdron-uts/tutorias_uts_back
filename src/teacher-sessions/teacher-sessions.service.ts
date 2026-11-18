@@ -1,17 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
-import { Clock } from '../common/clock.js';
+import { bogotaCalendarDay, Clock } from '../common/clock.js';
 import { AppException } from '../common/errors/app.exception.js';
 import type { Env } from '../config/env.js';
 import { lockModule, lockRoomsAndTeachers, lockWritablePeriod } from '../modules/locks.js';
 import { dayKey, formatTime } from '../modules/sessions.rules.js';
 import { OutboxService } from '../outbox/outbox.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { RescheduleDto } from './dto/teacher-sessions.dto.js';
+import type { RescheduleDto, ScopeDto } from './dto/teacher-sessions.dto.js';
 import { countStudentConflicts, findResourceConflict } from './session-availability.js';
 import { TeacherScheduleService } from './teacher-schedule.service.js';
-import { rescheduledPayload, type SessionScope } from './teacher-sessions.events.js';
+import { cancelledPayload, rescheduledPayload, restoredPayload, type SessionScope } from './teacher-sessions.events.js';
 import { canChangeSession, isWithinHours, shiftSession, validateReschedule } from './teacher-sessions.rules.js';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -87,7 +87,7 @@ export class TeacherSessionsService {
   }
 
   // The sessions a change touches: only the chosen one, or it and the future ones of its weekly slot.
-  private async affected(db: Db, session: Session, scope: SessionScope): Promise<Session[]> {
+  private async affected(db: Db, session: Session, scope: SessionScope, restoring = false): Promise<Session[]> {
     if (scope === 'SESSION') return [session];
     return db.moduleSession.findMany({
       where: {
@@ -96,7 +96,9 @@ export class TeacherSessionsService {
         teacherId: session.teacherId,
         deletedAt: null,
         startsAt: { gte: session.startsAt },
-        status: { in: ['SCHEDULED', 'RESCHEDULED'] },
+        ...(restoring
+          ? { status: 'CANCELLED' as const, cancelReason: 'TEACHER' as const }
+          : { status: { in: ['SCHEDULED' as const, 'RESCHEDULED' as const] } }),
       },
       orderBy: { startsAt: 'asc' },
     });
@@ -179,10 +181,14 @@ export class TeacherSessionsService {
     return moves;
   }
 
-  // The sessions as the teacher sees them: after a write from the database; on a dry run, the current
-  // ones with the new hours the change would give them.
+  // The sessions as the teacher sees them after a write.
+  private async views(teacherId: string, ids: readonly string[]) {
+    return this.schedule.byIds(teacherId, ids);
+  }
+
+  // On a dry run, the current sessions with the new hours the change would give them.
   private async answer(teacherId: string, scope: SessionScope, moves: Move[], dryRun: boolean) {
-    const views = await this.schedule.byIds(teacherId, moves.map((m) => m.session.id));
+    const views = await this.views(teacherId, moves.map((m) => m.session.id));
     const sessions = dryRun
       ? views.map((view) => {
           const move = moves.find((m) => m.session.id === view.id)!;
@@ -190,5 +196,128 @@ export class TeacherSessionsService {
         })
       : views;
     return { scope, dryRun, sessions };
+  }
+
+  async cancel(teacherId: string, sessionId: string, dto: ScopeDto) {
+    const found = await this.find(this.prisma, teacherId, sessionId);
+    const ids = await this.prisma.$transaction(async (tx) => {
+      await lockWritablePeriod(tx, found.module.periodId);
+      await lockModule(tx, found.moduleId, found.module.periodId);
+      const fresh = await this.find(tx, teacherId, sessionId);
+      this.assertChangeable(fresh);
+      if (fresh.status === 'CANCELLED') {
+        throw new AppException(409, 'SESSION_NOT_CHANGEABLE', 'The session is cancelled', { reason: 'CANCELLED' });
+      }
+      const sessions = await this.affected(tx, fresh, dto.scope);
+      await tx.moduleSession.updateMany({
+        where: { id: { in: sessions.map((x) => x.id) } },
+        data: { status: 'CANCELLED', cancelReason: 'TEACHER' },
+      });
+      await this.outbox.record(tx, {
+        type: 'SESSION_CANCELLED_TEACHER',
+        moduleId: found.moduleId,
+        payload: cancelledPayload(dto.scope, sessions.map((x) => ({ sessionId: x.id, from: x.startsAt }))),
+      });
+      return sessions.map((x) => x.id);
+    });
+    return { scope: dto.scope, dryRun: false, sessions: await this.views(teacherId, ids) };
+  }
+
+  // Gives back what the teacher cancelled, after checking the room, the teacher and the students again.
+  async restore(teacherId: string, sessionId: string, dto: ScopeDto) {
+    const found = await this.find(this.prisma, teacherId, sessionId);
+    const ids = await this.prisma.$transaction(async (tx) => {
+      await lockWritablePeriod(tx, found.module.periodId);
+      await lockModule(tx, found.moduleId, found.module.periodId);
+      const fresh = await this.find(tx, teacherId, sessionId);
+      if (fresh.startsAt <= this.clock.now()) {
+        throw new AppException(409, 'SESSION_NOT_CHANGEABLE', 'The session has already passed', { reason: 'PAST' });
+      }
+      const why =
+        fresh.status !== 'CANCELLED' ? 'NOT_CANCELLED' : fresh.cancelReason !== 'TEACHER' ? 'CANCELLED_BY_OTHER' : null;
+      if (why) {
+        throw new AppException(409, 'SESSION_NOT_CHANGEABLE', 'Only a session the teacher cancelled can be restored', {
+          reason: why,
+        });
+      }
+      this.assertChangeable(fresh);
+      const sessions = await this.affected(tx, fresh, dto.scope, true);
+      await lockRoomsAndTeachers(
+        tx,
+        [...new Set(sessions.map((x) => x.roomId))],
+        [...new Set(sessions.map((x) => x.teacherId))],
+      );
+      const { startsOn, endsOn } = fresh.module.period;
+      const holidays = await tx.holiday.findMany({
+        where: { deletedAt: null, date: { gte: startsOn, lte: endsOn } },
+        select: { date: true },
+      });
+      const holidayDays = new Set(holidays.map((h) => dayKey(h.date)));
+      for (const session of sessions) {
+        const at = dto.scope === 'SERIES' ? { sessionId: session.id } : {};
+        const day = dayKey(bogotaCalendarDay(session.startsAt));
+        if (holidayDays.has(day)) {
+          throw new AppException(422, 'SESSION_RESCHEDULE_INVALID_DATE', 'That day is a holiday', {
+            reason: 'HOLIDAY',
+            date: day,
+            ...at,
+          });
+        }
+        const clash = await findResourceConflict(tx, {
+          roomId: session.roomId,
+          teacherId: session.teacherId,
+          startsAt: session.startsAt,
+          endsAt: session.endsAt,
+          ignoreSessionIds: sessions.map((x) => x.id),
+        });
+        if (clash) {
+          throw new AppException(
+            409,
+            clash.kind === 'teacher' ? 'MODULE_TEACHER_CONFLICT' : 'MODULE_ROOM_CONFLICT',
+            'The teacher or the room is busy at that time',
+            { conflict: clash.conflict, ...at },
+          );
+        }
+        const students = await countStudentConflicts(tx, {
+          sessionId: session.id,
+          startsAt: session.startsAt,
+          endsAt: session.endsAt,
+        });
+        if (students > 0) {
+          throw new AppException(409, 'SESSION_STUDENT_CONFLICT', 'Enrolled students have another session then', {
+            students,
+            ...at,
+          });
+        }
+      }
+      for (const session of sessions) {
+        await tx.moduleSession.update({
+          where: { id: session.id },
+          data: {
+            status: session.startsAt.getTime() === session.originalStartsAt.getTime() ? 'SCHEDULED' : 'RESCHEDULED',
+            cancelReason: null,
+          },
+        });
+      }
+      await this.outbox.record(tx, {
+        type: 'SESSION_RESTORED_TEACHER',
+        moduleId: found.moduleId,
+        payload: restoredPayload(dto.scope, sessions.map((x) => ({ sessionId: x.id, to: x.startsAt }))),
+      });
+      return sessions.map((x) => x.id);
+    });
+    return { scope: dto.scope, dryRun: false, sessions: await this.views(teacherId, ids) };
+  }
+
+  // Past sessions and the window of the lead time, for cancel and restore.
+  private assertChangeable(session: Found) {
+    const now = this.clock.now();
+    if (session.startsAt <= now) {
+      throw new AppException(409, 'SESSION_NOT_CHANGEABLE', 'The session has already passed', { reason: 'PAST' });
+    }
+    const minutes = this.schedule.leadMinutes;
+    if (!canChangeSession(session.startsAt, now, minutes)) {
+      throw new AppException(409, 'SESSION_CHANGE_WINDOW_PASSED', 'Too close to the session', { minutes });
+    }
   }
 }

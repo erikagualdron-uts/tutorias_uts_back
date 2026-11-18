@@ -32,7 +32,7 @@ describe('teacher sessions: concurrency', () => {
         teacherApi(ctx, a.teacher).reschedule(a.sessions[0][0].id, { scope: 'SESSION', startsAt: wednesday() }),
         teacherApi(ctx, b.teacher).reschedule(b.sessions[0][0].id, { scope: 'SESSION', startsAt: wednesday() }),
       ]);
-      expect(codes(results).sort(), `round ${round}`).toEqual([200, 'MODULE_ROOM_CONFLICT']);
+      expect(codes(results).sort((a, b) => String(a).localeCompare(String(b))), `round ${round}`).toEqual([200, 'MODULE_ROOM_CONFLICT']);
       const taken = await ctx.prisma.moduleSession.count({ where: { roomId: a.room.id, startsAt: new Date(wednesday()) } });
       expect(taken).toBe(1);
     }
@@ -47,7 +47,7 @@ describe('teacher sessions: concurrency', () => {
       api.reschedule(a.sessions[0][0].id, { scope: 'SESSION', startsAt: wednesday() }),
       api.reschedule(c.sessions[0][0].id, { scope: 'SESSION', startsAt: wednesday() }),
     ]);
-    expect(codes(results).sort()).toEqual([200, 'MODULE_TEACHER_CONFLICT']);
+    expect(codes(results).sort((a, b) => String(a).localeCompare(String(b)))).toEqual([200, 'MODULE_TEACHER_CONFLICT']);
   });
 
   it('keeps the attendees within the capacity when a reschedule and an enrollment arrive together', async () => {
@@ -64,6 +64,27 @@ describe('teacher sessions: concurrency', () => {
     expect(enrolled.status).toBe(409);
     expect(enrolled.body.code).toBe('ENROLLMENT_MODULE_FULL');
     expect(await ctx.prisma.enrollment.count({ where: { moduleId: a.module.id, status: 'ACTIVE' } })).toBe(1);
+  });
+
+  it('leaves a coherent state when the same session is rescheduled and cancelled together', async () => {
+    for (let round = 0; round < 4; round++) {
+      await ctx.reset();
+      const p = await start(ctx);
+      const a = await seriesModule(ctx, p.id, { weeks: 1 });
+      const api = teacherApi(ctx, a.teacher);
+      const id = a.sessions[0][0].id;
+      const results = await Promise.all([
+        api.reschedule(id, { scope: 'SESSION', startsAt: wednesday() }),
+        api.cancel(id, { scope: 'SESSION' }),
+      ]);
+      const row = await ctx.prisma.moduleSession.findUniqueOrThrow({ where: { id } });
+      // either order is fine, but a cancelled session never keeps a reschedule status without its reason
+      if (row.status === 'CANCELLED') expect(row.cancelReason, `round ${round}`).toBe('TEACHER');
+      else expect(row.cancelReason).toBeNull();
+      expect(results.filter((r) => r.status === 200).length).toBeGreaterThanOrEqual(1);
+      const events = await ctx.prisma.outboxEvent.count();
+      expect(events).toBe(results.filter((r) => r.status === 200).length);
+    }
   });
 
   it('keeps the helpers honest', async () => {
