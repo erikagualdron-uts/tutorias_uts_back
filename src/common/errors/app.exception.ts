@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 
-// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions and 011-student-enrollment contracts; the app translates them.
+// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions, 011-student-enrollment and 012-teacher-sessions contracts; the app translates them.
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
   'EMAIL_ALREADY_REGISTERED',
@@ -56,6 +56,10 @@ export const ERROR_CODES = [
   'ENROLLMENT_NOT_ACTIVE',
   'ENROLLMENT_CANCEL_WINDOW_PASSED',
   'ENROLLMENT_SESSION_NOT_CANCELLABLE',
+  'SESSION_CHANGE_WINDOW_PASSED',
+  'SESSION_NOT_CHANGEABLE',
+  'SESSION_RESCHEDULE_INVALID_DATE',
+  'SESSION_STUDENT_CONFLICT',
   'HOLIDAY_DATE_TAKEN',
   'HOLIDAY_IN_PAST',
   'HOLIDAYS_IMPORT_UNAVAILABLE',

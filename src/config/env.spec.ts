@@ -23,3 +23,19 @@ describe('STUDENT_CANCEL_LEAD_MINUTES', () => {
     );
   });
 });
+
+describe('TEACHER_CHANGE_LEAD_MINUTES', () => {
+  it('defaults to 120', () => {
+    expect(validateEnv(base).TEACHER_CHANGE_LEAD_MINUTES).toBe(120);
+  });
+
+  it('accepts a positive integer', () => {
+    expect(validateEnv({ ...base, TEACHER_CHANGE_LEAD_MINUTES: '90' }).TEACHER_CHANGE_LEAD_MINUTES).toBe(90);
+  });
+
+  it.each(['0', '-5', 'abc', '1.5'])('rejects %s', (value) => {
+    expect(() => validateEnv({ ...base, TEACHER_CHANGE_LEAD_MINUTES: value })).toThrow(
+      'TEACHER_CHANGE_LEAD_MINUTES must be a positive integer',
+    );
+  });
+});

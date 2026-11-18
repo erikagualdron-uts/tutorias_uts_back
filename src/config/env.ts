@@ -20,6 +20,7 @@ export interface Env {
   MODULE_EARLIEST_MINUTE: number;
   MODULE_LATEST_MINUTE: number;
   STUDENT_CANCEL_LEAD_MINUTES: number;
+  TEACHER_CHANGE_LEAD_MINUTES: number;
 }
 
 const required = [
@@ -72,6 +73,11 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
   if (!Number.isInteger(cancelLead) || cancelLead <= 0)
     throw new Error('STUDENT_CANCEL_LEAD_MINUTES must be a positive integer');
 
+  // How long before a session a teacher may still reschedule, cancel or restore it (minutes).
+  const changeLead = num('TEACHER_CHANGE_LEAD_MINUTES', 120);
+  if (!Number.isInteger(changeLead) || changeLead <= 0)
+    throw new Error('TEACHER_CHANGE_LEAD_MINUTES must be a positive integer');
+
   return {
     PORT: num('PORT', 3000),
     DATABASE_URL: str('DATABASE_URL'),
@@ -94,5 +100,6 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     MODULE_EARLIEST_MINUTE: earliest,
     MODULE_LATEST_MINUTE: latest,
     STUDENT_CANCEL_LEAD_MINUTES: cancelLead,
+    TEACHER_CHANGE_LEAD_MINUTES: changeLead,
   };
 }
