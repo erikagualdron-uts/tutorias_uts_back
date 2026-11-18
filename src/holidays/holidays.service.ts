@@ -115,11 +115,12 @@ export class HolidaysService {
     });
   }
 
-  // The future SCHEDULED sessions of the holiday (in Bogota) become CANCELLED for that reason.
+  // The future SCHEDULED or RESCHEDULED sessions of the holiday (in Bogota) become CANCELLED for that
+  // reason; one a teacher moved onto the day counts too. Sessions the teacher cancelled are left alone.
   private async cancelSessions(tx: Tx, holiday: Holiday): Promise<number> {
     const sessions = await tx.moduleSession.findMany({
       where: {
-        status: 'SCHEDULED',
+        status: { in: ['SCHEDULED', 'RESCHEDULED'] },
         deletedAt: null,
         startsAt: { gt: this.clock.now(), ...this.dayRange(holiday.date) },
         module: OPEN_MODULE,
@@ -164,7 +165,12 @@ export class HolidaysService {
       }
       await tx.moduleSession.update({
         where: { id: session.id },
-        data: { status: 'SCHEDULED', cancelReason: null, holidayId: null },
+        // A session a teacher had moved comes back rescheduled, at the hour it had.
+        data: {
+          status: session.startsAt.getTime() === session.originalStartsAt.getTime() ? 'SCHEDULED' : 'RESCHEDULED',
+          cancelReason: null,
+          holidayId: null,
+        },
       });
       result.restored++;
       restoredBy.set(session.moduleId, (restoredBy.get(session.moduleId) ?? 0) + 1);

@@ -135,6 +135,48 @@ describe('holidays (US6)', () => {
       expect(event!.payload).toEqual({ date: '2030-01-22', restored: 1, generated: 0 });
     });
 
+    it('cancels a session a teacher moved onto the day and gives it back rescheduled', async () => {
+      const { id, teacher, room } = await moduleOf();
+      const moved = await sessionOn(id, '2030-01-15');
+      // moved from Tuesday 2030-01-15 14:00 to Tuesday 2030-01-22 16:00 would overlap; use Wednesday 01-23 instead
+      const to = new Date('2030-01-23T19:00:00Z');
+      await ctx.prisma.moduleSession.update({
+        where: { id: moved.id },
+        data: { startsAt: to, endsAt: new Date(to.getTime() + 2 * 3_600_000), status: 'RESCHEDULED' },
+      });
+      const holiday = (await call('post', '/holidays', { date: '2030-01-23', name: 'Miércoles' })).body;
+      expect(holiday.cancelledSessions).toBe(1);
+      expect(await ctx.prisma.moduleSession.findUniqueOrThrow({ where: { id: moved.id } })).toMatchObject({
+        status: 'CANCELLED',
+        cancelReason: 'HOLIDAY',
+      });
+      const res = await call('delete', `/holidays/${holiday.holiday.id}`);
+      expect(res.body.restored).toBe(1);
+      const back = await ctx.prisma.moduleSession.findUniqueOrThrow({ where: { id: moved.id } });
+      expect(back).toMatchObject({ status: 'RESCHEDULED', cancelReason: null, holidayId: null });
+      expect(back.startsAt.toISOString()).toBe(to.toISOString());
+      expect(teacher.id).toBeTruthy();
+      expect(room.id).toBeTruthy();
+    });
+
+    it('leaves a session the teacher cancelled alone, both when the holiday is created and deleted', async () => {
+      const { id } = await moduleOf();
+      const session = await sessionOn(id, '2030-01-22');
+      await ctx.prisma.moduleSession.update({ where: { id: session.id }, data: { status: 'CANCELLED', cancelReason: 'TEACHER' } });
+      const holiday = (await call('post', '/holidays', { date: '2030-01-22', name: 'Festivo' })).body;
+      expect(holiday.cancelledSessions).toBe(0);
+      expect(await ctx.prisma.moduleSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({
+        status: 'CANCELLED',
+        cancelReason: 'TEACHER',
+        holidayId: null,
+      });
+      await call('delete', `/holidays/${holiday.holiday.id}`);
+      expect(await ctx.prisma.moduleSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({
+        status: 'CANCELLED',
+        cancelReason: 'TEACHER',
+      });
+    });
+
     it('generates the sessions that were never created because the holiday already existed', async () => {
       const holiday = (await call('post', '/holidays', { date: '2030-01-22', name: 'Festivo' })).body.holiday;
       const { id } = await moduleOf();
