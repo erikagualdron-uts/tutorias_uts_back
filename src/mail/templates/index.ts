@@ -5,13 +5,10 @@ import { noticeEn } from './notice.en.js';
 import { noticeEs } from './notice.es.js';
 import { resetEn } from './reset.en.js';
 import { resetEs } from './reset.es.js';
+import { smtpTestEn } from './smtp-test.en.js';
+import { smtpTestEs } from './smtp-test.es.js';
 import { verificationEn } from './verification.en.js';
 import { verificationEs } from './verification.es.js';
-
-export interface RenderedMail {
-  subject: string;
-  text: string;
-}
 
 export interface CodeMailData {
   code: string;
@@ -58,13 +55,4 @@ export function renderNoticeMail(
 }
 
 // The test email of the settings screen (FR-028): short, in the language of the CAE who asks.
-export const renderSmtpTestMail = (locale: Locale): RenderedMail =>
-  locale === 'en'
-    ? {
-        subject: 'Email test - UTS Tutorías',
-        text: 'The mail server of UTS Tutorías is working. You can ignore this message.',
-      }
-    : {
-        subject: 'Prueba de correo - UTS Tutorías',
-        text: 'El servidor de correo de UTS Tutorías funciona. Puedes ignorar este mensaje.',
-      };
+export const renderSmtpTestMail = (locale: Locale): MailContent => ({ es: smtpTestEs, en: smtpTestEn })[locale];

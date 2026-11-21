@@ -64,12 +64,3 @@ export function composeMail({ subject, title, tone, blocks }: MailContent, brand
   const text = [title, ...blocks.map((block) => block.text), footerLines.join('\n')].join('\n\n');
   return { subject, text, html };
 }
-
-// Temporary bridge (T009): lets a template that still returns plain text go through the layout.
-// Each story replaces its template with a MailContent and T029 deletes this.
-export const withLayout = ({ subject, text }: { subject: string; text: string }): MailContent => ({
-  subject,
-  title: subject,
-  tone: 'info',
-  blocks: text.split(/\n{2,}/).map((paragraph) => ({ kind: 'p' as const, text: paragraph })),
-});

@@ -150,8 +150,17 @@ describe('smtp settings', () => {
       expect(res.body).toEqual({ ok: true, cause: null });
       const [mail] = ctx.smtp.to(cae.email);
       expect(mail.subject).toBe('Prueba de correo - UTS Tutorías');
+      expect(mail.html).toContain('cid:uts-logo');
+      expect(mail.text).toContain('Institución Universitaria Tecnológica de Santander – UTS');
       expect(mail.from).toBe('cae@uts.edu.co');
       expect(ctx.smtp.options.at(-1)).toMatchObject({ host: 'smtp.uts.edu.co', auth: { user: 'cae', pass: 'clave-secreta' } });
+    });
+
+    it('is written in the language of the CAE who asks', async () => {
+      await ctx.prisma.user.update({ where: { email: cae.email }, data: { locale: 'en' } });
+      await call('put', '/settings/smtp', VALID).expect(200);
+      await call('post', '/settings/smtp/test').expect(200);
+      expect(ctx.smtp.to(cae.email)[0].subject).toBe('Email test - UTS Tutorías');
     });
 
     it('applies a change at once, without restarting (FR-030)', async () => {
@@ -182,6 +191,7 @@ describe('smtp settings', () => {
       const res = await call('post', '/settings/smtp/test').expect(409);
       spy.mockRestore();
       expect(res.body.code).toBe('SMTP_NOT_CONFIGURED');
+      expect(ctx.smtp.sent).toHaveLength(0);
     });
   });
 });

@@ -8,7 +8,6 @@ import { MessageBuilder } from '../../mail/message.js';
 import { SmtpConfigService, type SmtpView } from '../../mail/smtp-config.service.js';
 import { smtpCause, type SmtpCause } from '../../mail/smtp-errors.js';
 import { renderSmtpTestMail } from '../../mail/templates/index.js';
-import { withLayout } from '../../mail/templates/layout.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import type { SaveSmtpDto } from './dto/smtp.dto.js';
 
@@ -52,9 +51,8 @@ export class SmtpService {
   async test(user: Pick<User, 'email' | 'locale'>): Promise<{ ok: boolean; cause: SmtpCause | null }> {
     const mail = await this.smtp.transport();
     if (!mail) throw new AppException(409, 'SMTP_NOT_CONFIGURED', 'The mail server is not configured');
-    const content = withLayout(renderSmtpTestMail(user.locale));
     try {
-      await mail.transport.sendMail(this.messages.build(mail.from, user.email, content));
+      await mail.transport.sendMail(this.messages.build(mail.from, user.email, renderSmtpTestMail(user.locale)));
       return { ok: true, cause: null };
     } catch (error) {
       return { ok: false, cause: smtpCause(error) };
