@@ -36,7 +36,11 @@ describe('email templates: delivery of every kind', () => {
     expect(mail.html).toContain('cid:uts-logo');
     expect(mail.attachments?.[0]).toMatchObject({ cid: 'uts-logo' });
     expect(mail.text).toContain(BRAND);
-    for (const paragraph of mail.text.split('\n\n')) expect(readable(mail.html!)).toContain(flat(paragraph));
+    // The badge is "[Text]" in the plain text and the same text in capitals in the html.
+    for (const paragraph of mail.text.split('\n\n')) {
+      const badge = /^\[(.+)\]$/.exec(paragraph);
+      expect(readable(mail.html!)).toContain(badge ? badge[1].toUpperCase() : flat(paragraph));
+    }
   }
 
   it('sends the seven notice types once each, in the language of each student', async () => {
@@ -84,7 +88,7 @@ describe('email templates: delivery of every kind', () => {
         const mails = ctx.smtp.to(job.to);
         expect(mails).toHaveLength(1);
         expectBranded(mails[0]);
-        expect(mails[0].html).toContain('>123456</div>');
+        expect(mails[0].html).toContain('>123456</td>');
         expect(mails[0].subject).not.toContain('123456');
       }
     }

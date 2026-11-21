@@ -11,7 +11,7 @@ const compose = (template: 'verification' | 'reset', locale: 'es' | 'en') => com
 describe.each(['verification', 'reset'] as const)('%s email', (template) => {
   it.each(['es', 'en'] as const)('shows the code highlighted, the expiry in Bogota time and the brand in %s', (locale) => {
     const { subject, html, text } = compose(template, locale);
-    expect(html).toContain('>123456</div>');
+    expect(html).toContain('>123456</td>');
     expect(text.split('\n')).toContain('123456');
     expect(text).toMatch(/3:42/);
     expect(text).toContain(brand.name);

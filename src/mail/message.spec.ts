@@ -10,7 +10,7 @@ const config = {
   get: (key: string) =>
     ({ MAIL_BRAND_NAME: 'UTS', MAIL_CONTACT_EMAIL: '', MAIL_FOOTER_TEXT: '' })[key],
 } as unknown as ConfigService<Env, true>;
-const content: MailContent = { subject: 'Hola', title: 'Hola', tone: 'info', blocks: [{ kind: 'p', text: 'Texto' }] };
+const content: MailContent = { subject: 'Hola', lang: 'es', badge: 'Aviso', title: 'Hola', tone: 'info', blocks: [{ kind: 'p', text: 'Texto' }] };
 
 describe('MessageBuilder', () => {
   const message = new MessageBuilder(config).build('no-reply@uts.edu.co', 'ana@uts.edu.co', content);

@@ -83,7 +83,7 @@ describe('email language follows the stored locale (US7)', () => {
       expect(job.template).toBe(template);
       expect(new Date(job.expiresAt).getTime()).toBeGreaterThanOrEqual(before + ttlMs - 1000);
       expect(new Date(job.expiresAt).getTime()).toBeLessThanOrEqual(Date.now() + ttlMs + 1000);
-      expect(mail.html).toContain(`>${job.code}</div>`);
+      expect(mail.html).toContain(`>${job.code}</td>`);
       expect(mail.html).toContain('cid:uts-logo');
       expect(mail.text).toContain('Institución Universitaria Tecnológica de Santander – UTS');
     });

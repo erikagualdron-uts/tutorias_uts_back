@@ -29,6 +29,7 @@ export const renderMail = (template: MailTemplateName, locale: Locale, data: Cod
 // notifications/templates (the only place that writes them).
 export interface NoticeFrame {
   intro: string;
+  badge: string;
   tone: Tone;
 }
 export interface NoticeFrames {
@@ -45,12 +46,17 @@ export function renderNoticeMail(
   notice: { title: string; body: string },
 ): MailContent {
   const frames = NOTICE_FRAMES[locale];
-  const { intro, tone } = frames.byType[type] ?? frames.generic;
+  const { intro, badge, tone } = frames.byType[type] ?? frames.generic;
   return {
     subject: `${notice.title} - UTS Tutorías`,
+    lang: locale,
+    badge,
     title: notice.title,
     tone,
-    blocks: [intro, ...notice.body.split(/\n+/)].map((text) => ({ kind: 'p' as const, text })),
+    blocks: [
+      { kind: 'p', text: intro },
+      { kind: 'detail', text: notice.body },
+    ],
   };
 }
 

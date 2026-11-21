@@ -36,10 +36,21 @@ describe('notice email', () => {
     expect(text).toContain('<b>x</b> & y');
   });
 
-  it('keeps the frame whole with a 1000 character body and puts each line in its own paragraph', () => {
+  it('keeps the frame whole with a 1000 character body and keeps its line breaks', () => {
     const long = compose('MODULE_ROOM_CHANGED', 'en', { title: 'Room changed', body: `${'x'.repeat(1000)}\nSecond line` });
     expect(long.html).toContain('</html>');
-    expect(long.html).toContain('Second line</p>');
+    expect(long.html).toContain('<br>Second line');
+  });
+
+  it.each(LOCALES)('names the state in a badge of its own for each type in %s, so color is never the only signal', (locale) => {
+    const badges = TYPES.map((type) => renderNoticeMail(type, locale, notice).badge);
+    expect(new Set(badges).size).toBe(7);
+    for (const type of TYPES) expect(compose(type, locale).text).toContain(`[${renderNoticeMail(type, locale, notice).badge}]`);
+  });
+
+  it('sets the language of the page from the language of the student', () => {
+    expect(compose('MODULE_ROOM_CHANGED', 'en').html).toContain('<html lang="en"');
+    expect(compose('MODULE_ROOM_CHANGED', 'es').html).toContain('<html lang="es"');
   });
 
   it('falls back to the general frame for a type without its own', () => {
