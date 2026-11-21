@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { ConsoleLogger, INestApplication, type LogLevel } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { Redis } from 'ioredis';
 import request from 'supertest';
@@ -122,6 +122,23 @@ export interface SentMail {
   to: string;
   subject: string;
   text: string;
+  html?: string;
+  attachments?: { filename?: string; cid?: string; content?: Buffer }[];
+}
+
+// Records every line the API logs, so a test can prove a secret never reached the logs.
+export class FakeLogs extends ConsoleLogger {
+  readonly lines: string[] = [];
+
+  // Still writes to stdout and stderr, as the default logger does: other tests read those streams.
+  protected override printMessages(messages: unknown[], context?: string, logLevel?: LogLevel, writeStreamType?: 'stdout' | 'stderr') {
+    this.lines.push(messages.map(String).join(' '));
+    super.printMessages(messages, context, logLevel, writeStreamType);
+  }
+
+  reset() {
+    this.lines.length = 0;
+  }
 }
 
 // Stands in for the SMTP transport: records the messages; `failNext` rejects the next sends with the
@@ -279,6 +296,7 @@ export interface TestContext {
   holidays: FakeHolidaysClient;
   push: FakePushGateway;
   smtp: FakeMailTransport;
+  logs: FakeLogs;
   deliveryQueue: FakeDeliveryQueue;
   // Runs the outbox consumer once, as one poll of the worker would.
   runOutbox: () => Promise<number>;
@@ -293,6 +311,7 @@ export async function createTestApp(): Promise<TestContext> {
   const holidays = new FakeHolidaysClient();
   const push = new FakePushGateway();
   const smtp = new FakeMailTransport();
+  const logs = new FakeLogs();
   const deliveryQueue = new FakeDeliveryQueue();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
@@ -321,6 +340,7 @@ export async function createTestApp(): Promise<TestContext> {
 
   const app = moduleRef.createNestApplication();
   configureApp(app);
+  app.useLogger(logs);
   await app.init();
 
   const prisma = app.get(PrismaService);
@@ -346,6 +366,7 @@ export async function createTestApp(): Promise<TestContext> {
     holidays.reset();
     push.reset();
     smtp.reset();
+    logs.reset();
     deliveryQueue.reset();
     const keys = await redis.keys('login:*');
     if (keys.length) await redis.del(keys);
@@ -363,6 +384,7 @@ export async function createTestApp(): Promise<TestContext> {
     holidays,
     push,
     smtp,
+    logs,
     deliveryQueue,
     runOutbox: () => app.get(OutboxConsumer).run(),
     reset,

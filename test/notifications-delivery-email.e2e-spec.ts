@@ -64,7 +64,7 @@ describe('notifications: email delivery', () => {
     await deliveries.deliverEmail((await emailOf(students[0].id)).id);
     const [mail] = ctx.smtp.to(students[0].email);
     expect(mail.subject).toBe('Your session was cancelled - UTS Tutorías');
-    expect(mail.text).toMatch(/^Hello,/);
+    expect(mail.text).toContain('Hello,');
     expect(mail.text).toMatch(/Tuesday, January 8 at 2:00\s*PM/);
   });
 

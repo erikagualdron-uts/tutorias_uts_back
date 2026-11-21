@@ -12,6 +12,9 @@ export interface Env {
   SMTP_USER: string;
   SMTP_PASSWORD: string;
   SMTP_FROM: string;
+  MAIL_BRAND_NAME: string;
+  MAIL_CONTACT_EMAIL: string;
+  MAIL_FOOTER_TEXT: string;
   THROTTLE_PUBLIC_LIMIT: number;
   THROTTLE_PUBLIC_TTL_SECONDS: number;
   HOLIDAYS_API_BASE_URL: string;
@@ -104,6 +107,9 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     SMTP_USER: str('SMTP_USER'),
     SMTP_PASSWORD: str('SMTP_PASSWORD'),
     SMTP_FROM: str('SMTP_FROM', 'no-reply@uts.edu.co'),
+    MAIL_BRAND_NAME: str('MAIL_BRAND_NAME').trim() || 'Institución Universitaria Tecnológica de Santander – UTS',
+    MAIL_CONTACT_EMAIL: str('MAIL_CONTACT_EMAIL').trim(),
+    MAIL_FOOTER_TEXT: str('MAIL_FOOTER_TEXT').trim(),
     THROTTLE_PUBLIC_LIMIT: num('THROTTLE_PUBLIC_LIMIT', 10),
     THROTTLE_PUBLIC_TTL_SECONDS: num('THROTTLE_PUBLIC_TTL_SECONDS', 3600),
     HOLIDAYS_API_BASE_URL: holidaysBaseUrl.replace(/\/+$/, ''),
