@@ -16,6 +16,18 @@ import {
   type HolidaysClient,
 } from '../../src/holidays/holidays-client.js';
 import { MailService, type MailJob } from '../../src/mail/mail.service.js';
+import { MAIL_TRANSPORT_FACTORY } from '../../src/mail/smtp-config.service.js';
+import { DeliveryQueue, type DeliveryJob } from '../../src/notifications/delivery-queue.js';
+import { NotificationsProcessor, NotificationsScheduler } from '../../src/notifications/notifications.processor.js';
+import { OutboxConsumer } from '../../src/notifications/outbox.consumer.js';
+import {
+  PUSH_GATEWAY,
+  PushUnavailableError,
+  type PushGateway,
+  type PushMessage,
+  type PushReceiptStatus,
+  type PushTicket,
+} from '../../src/notifications/push/push-gateway.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 import { REDIS } from '../../src/redis/redis.module.js';
 import { RoleProbeController } from './role-probe.controller.js';
@@ -34,6 +46,113 @@ export class FakeMailbox {
 
   clear() {
     this.sent.length = 0;
+  }
+}
+
+// Stands in for the Expo push service: records what would be sent. `failNext` makes the next calls
+// fail like a network error; `ticketErrors` answers a token with an error ticket; `receipts` is what
+// the receipts call reports.
+export class FakePushGateway implements PushGateway {
+  readonly sent: PushMessage[] = [];
+  readonly ticketErrors = new Map<string, 'DEVICE_NOT_REGISTERED' | 'PUSH_REJECTED'>();
+  readonly receipts = new Map<string, PushReceiptStatus>();
+  failNext = 0;
+  private count = 0;
+
+  send(messages: readonly PushMessage[]): Promise<PushTicket[]> {
+    if (this.failNext > 0) {
+      this.failNext -= 1;
+      return Promise.reject(new PushUnavailableError());
+    }
+    this.sent.push(...messages);
+    return Promise.resolve(
+      messages.map((m): PushTicket => {
+        const error = this.ticketErrors.get(m.to);
+        return error ? { ok: false, error } : { ok: true, id: `ticket-${(this.count += 1)}` };
+      }),
+    );
+  }
+
+  getReceipts(ids: readonly string[]) {
+    return Promise.resolve(new Map(ids.map((id) => [id, this.receipts.get(id) ?? 'OK'] as const)));
+  }
+
+  to(token: string) {
+    return this.sent.filter((m) => m.to === token);
+  }
+
+  reset() {
+    this.sent.length = 0;
+    this.ticketErrors.clear();
+    this.receipts.clear();
+    this.failNext = 0;
+  }
+}
+
+// Stands in for the delivery queue: records what would be queued, so no job reaches the Redis that a
+// dev server may share and tests drive the delivery themselves.
+export class FakeDeliveryQueue {
+  readonly jobs: DeliveryJob[] = [];
+  readonly receipts: { ticketId: string; token: string }[][] = [];
+  failNext = 0;
+
+  enqueue(jobs: readonly DeliveryJob[]): Promise<void> {
+    if (this.failNext > 0) {
+      this.failNext -= 1;
+      return Promise.reject(new Error('queue unavailable'));
+    }
+    this.jobs.push(...jobs);
+    return Promise.resolve();
+  }
+
+  enqueueReceipts(entries: { ticketId: string; token: string }[]): Promise<void> {
+    this.receipts.push(entries);
+    return Promise.resolve();
+  }
+
+  reset() {
+    this.jobs.length = 0;
+    this.receipts.length = 0;
+    this.failNext = 0;
+  }
+}
+
+export interface SentMail {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+}
+
+// Stands in for the SMTP transport: records the messages; `failNext` rejects the next sends with the
+// given error (a code like `EAUTH`, as Nodemailer reports it).
+export class FakeMailTransport {
+  readonly sent: SentMail[] = [];
+  readonly options: Record<string, unknown>[] = [];
+  failNext: { count: number; code: string } | null = null;
+
+  readonly factory = (options: Record<string, unknown>) => {
+    this.options.push(options);
+    return {
+      sendMail: (mail: SentMail) => {
+        if (this.failNext && this.failNext.count > 0) {
+          this.failNext.count -= 1;
+          return Promise.reject(Object.assign(new Error('smtp failure'), { code: this.failNext.code }));
+        }
+        this.sent.push(mail);
+        return Promise.resolve({});
+      },
+    } as never;
+  };
+
+  to(email: string) {
+    return this.sent.filter((m) => m.to === email);
+  }
+
+  reset() {
+    this.sent.length = 0;
+    this.options.length = 0;
+    this.failNext = null;
   }
 }
 
@@ -158,6 +277,11 @@ export interface TestContext {
   clock: TestClock;
   usage: FakeConfigUsage;
   holidays: FakeHolidaysClient;
+  push: FakePushGateway;
+  smtp: FakeMailTransport;
+  deliveryQueue: FakeDeliveryQueue;
+  // Runs the outbox consumer once, as one poll of the worker would.
+  runOutbox: () => Promise<number>;
   reset: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -167,6 +291,9 @@ export async function createTestApp(): Promise<TestContext> {
   const clock = new TestClock();
   const usage = new FakeConfigUsage();
   const holidays = new FakeHolidaysClient();
+  const push = new FakePushGateway();
+  const smtp = new FakeMailTransport();
+  const deliveryQueue = new FakeDeliveryQueue();
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
     controllers: [RoleProbeController],
@@ -179,6 +306,17 @@ export async function createTestApp(): Promise<TestContext> {
     .useValue(usage)
     .overrideProvider(HOLIDAYS_CLIENT)
     .useValue(holidays)
+    .overrideProvider(PUSH_GATEWAY)
+    .useValue(push)
+    .overrideProvider(MAIL_TRANSPORT_FACTORY)
+    .useValue(smtp.factory)
+    .overrideProvider(DeliveryQueue)
+    .useValue(deliveryQueue)
+    // No background polling or workers: the tests call the services themselves.
+    .overrideProvider(NotificationsScheduler)
+    .useValue({})
+    .overrideProvider(NotificationsProcessor)
+    .useValue({})
     .compile();
 
   const app = moduleRef.createNestApplication();
@@ -206,6 +344,9 @@ export async function createTestApp(): Promise<TestContext> {
     );
     usage.reset();
     holidays.reset();
+    push.reset();
+    smtp.reset();
+    deliveryQueue.reset();
     const keys = await redis.keys('login:*');
     if (keys.length) await redis.del(keys);
     mailbox.clear();
@@ -220,6 +361,10 @@ export async function createTestApp(): Promise<TestContext> {
     clock,
     usage,
     holidays,
+    push,
+    smtp,
+    deliveryQueue,
+    runOutbox: () => app.get(OutboxConsumer).run(),
     reset,
     close: () => app.close(),
   };

@@ -1,4 +1,4 @@
-import type { Role } from '@prisma/client';
+import type { Locale, OutboxEventType, Prisma, Role } from '@prisma/client';
 import argon2 from 'argon2';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
 
@@ -12,6 +12,7 @@ interface UserOverrides {
   mustChangePassword?: boolean;
   status?: 'ACTIVE' | 'INACTIVE';
   deletedAt?: Date | null;
+  locale?: Locale;
 }
 
 // Inserts a user directly so each suite can start from any account state.
@@ -31,6 +32,7 @@ export async function createUser(
       status: overrides.status ?? 'ACTIVE',
       emailVerifiedAt: verified ? new Date() : null,
       mustChangePassword: overrides.mustChangePassword ?? false,
+      locale: overrides.locale ?? 'es',
       deletedAt: overrides.deletedAt ?? null,
     },
   });
@@ -246,6 +248,21 @@ export function createAbsence(
       enrollmentId: overrides.enrollmentId,
       sessionId: overrides.sessionId,
       deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}
+
+// An unprocessed outbox event, as the changes of specs 010 and 012 write it.
+export function createOutboxEvent(
+  prisma: PrismaService,
+  overrides: { type: OutboxEventType; moduleId: string; payload: Prisma.InputJsonObject; createdAt?: Date },
+) {
+  return prisma.outboxEvent.create({
+    data: {
+      type: overrides.type,
+      moduleId: overrides.moduleId,
+      payload: overrides.payload,
+      ...(overrides.createdAt && { createdAt: overrides.createdAt }),
     },
   });
 }
