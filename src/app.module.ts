@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AccountsModule } from './accounts/accounts.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClockModule } from './common/clock.js';
 import { ConfigUsageModule } from './config-usage/config-usage.module.js';
@@ -39,6 +40,7 @@ import { UsersModule } from './users/users.module.js';
     MailModule,
     NotificationsModule,
     AuthModule,
+    AccountsModule,
     TeachersModule,
     UsersModule,
   ],
