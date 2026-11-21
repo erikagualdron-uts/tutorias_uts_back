@@ -13,25 +13,19 @@ export interface RenderedMail {
   text: string;
 }
 
-export type MailTemplate = (code: string) => RenderedMail;
+export interface CodeMailData {
+  code: string;
+  expiresAt: Date;
+}
+export type MailTemplate = (data: CodeMailData) => MailContent;
 
-// Each story registers its templates here (verification.{es,en}.ts, reset.{es,en}.ts).
-export const MAIL_TEMPLATES: Partial<
-  Record<MailTemplateName, Record<Locale, MailTemplate>>
-> = {
+export const MAIL_TEMPLATES: Record<MailTemplateName, Record<Locale, MailTemplate>> = {
   verification: { es: verificationEs, en: verificationEn },
   reset: { es: resetEs, en: resetEn },
 };
 
-export function renderMail(
-  template: MailTemplateName,
-  locale: Locale,
-  code: string,
-): RenderedMail {
-  const byLocale = MAIL_TEMPLATES[template];
-  if (!byLocale) throw new Error(`Mail template not registered: ${template}`);
-  return byLocale[locale](code);
-}
+export const renderMail = (template: MailTemplateName, locale: Locale, data: CodeMailData): MailContent =>
+  MAIL_TEMPLATES[template][locale](data);
 
 // The email of a notice (spec 015): each type of event has its own introduction and accent; the title
 // and the text of the notice come already written, in the language of the student, by

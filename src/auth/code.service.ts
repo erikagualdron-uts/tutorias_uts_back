@@ -11,6 +11,8 @@ import { SettingsService } from '../settings/settings.service.js';
 export interface IssuedCode {
   // Undefined when the cooldown or hourly limit blocked a new code; callers answer the same either way.
   code?: string;
+  // When `code` exists, the moment it stops working; the email shows it.
+  expiresAt?: Date;
   resendAvailableAt: Date;
 }
 
@@ -49,7 +51,7 @@ export class CodeService {
     }
 
     const code = randomDigits(6);
-    const ttlMs = await this.ttlMs(purpose);
+    const expiresAt = new Date(now.getTime() + (await this.ttlMs(purpose)));
     await this.prisma.$transaction([
       // A new code invalidates the previous one.
       this.prisma.verificationCode.updateMany({
@@ -62,12 +64,13 @@ export class CodeService {
           purpose,
           codeHash: this.hash(code),
           createdAt: now,
-          expiresAt: new Date(now.getTime() + ttlMs),
+          expiresAt,
         },
       }),
     ]);
     return {
       code,
+      expiresAt,
       resendAvailableAt: new Date(now.getTime() + cooldown * 1000),
     };
   }

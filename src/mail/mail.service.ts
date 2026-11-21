@@ -10,6 +10,8 @@ export interface MailJob {
   template: MailTemplateName;
   locale: Locale;
   code: string;
+  // ISO instant (UTC) when the code stops working; the email shows it in Bogota time.
+  expiresAt: string;
 }
 
 export const MAIL_QUEUE = 'mail';

@@ -101,16 +101,17 @@ export class RegistrationService {
     email: string;
     locale: 'es' | 'en';
   }) {
-    const { code, resendAvailableAt } = await this.codes.issue(
+    const { code, expiresAt, resendAvailableAt } = await this.codes.issue(
       user.id,
       'EMAIL_VERIFICATION',
     );
-    if (code)
+    if (code && expiresAt)
       await this.mail.sendCode({
         to: user.email,
         template: 'verification',
         locale: user.locale,
         code,
+        expiresAt: expiresAt.toISOString(),
       });
     return { resendAvailableAt };
   }
