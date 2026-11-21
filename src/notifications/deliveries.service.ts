@@ -7,8 +7,7 @@ import { hasEmailDomain } from '../common/email.util.js';
 import { MessageBuilder } from '../mail/message.js';
 import { SmtpConfigService } from '../mail/smtp-config.service.js';
 import { smtpCause } from '../mail/smtp-errors.js';
-import { renderNotificationMail } from '../mail/templates/index.js';
-import { withLayout } from '../mail/templates/layout.js';
+import { renderNoticeMail } from '../mail/templates/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { DeliveryQueue } from './delivery-queue.js';
@@ -126,7 +125,7 @@ export class DeliveriesService {
       return;
     }
     await this.prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { attempts: { increment: 1 } } });
-    const content = withLayout(renderNotificationMail(notification.locale, notification));
+    const content = renderNoticeMail(notification.type, notification.locale, notification);
     try {
       await mail.transport.sendMail(this.messages.build(mail.from, user.email, content));
     } catch (error) {

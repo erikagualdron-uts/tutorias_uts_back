@@ -1,7 +1,8 @@
-import type { Locale } from '@prisma/client';
+import type { Locale, OutboxEventType } from '@prisma/client';
 import type { MailTemplateName } from '../mail.service.js';
-import { notificationEn } from './notification.en.js';
-import { notificationEs } from './notification.es.js';
+import type { MailContent, Tone } from './layout.js';
+import { noticeEn } from './notice.en.js';
+import { noticeEs } from './notice.es.js';
 import { resetEn } from './reset.en.js';
 import { resetEs } from './reset.es.js';
 import { verificationEn } from './verification.en.js';
@@ -32,19 +33,35 @@ export function renderMail(
   return byLocale[locale](code);
 }
 
-// The email of a notice (spec 014): the title and the text of the notice, already in the language of
-// the student, with a greeting and the institution as the footer. Plain text, like the other emails.
-export type NotificationMailTemplate = (notice: { title: string; body: string }) => RenderedMail;
+// The email of a notice (spec 015): each type of event has its own introduction and accent; the title
+// and the text of the notice come already written, in the language of the student, by
+// notifications/templates (the only place that writes them).
+export interface NoticeFrame {
+  intro: string;
+  tone: Tone;
+}
+export interface NoticeFrames {
+  byType: Record<OutboxEventType, NoticeFrame>;
+  // A type added later without a frame still reaches the student.
+  generic: NoticeFrame;
+}
 
-const NOTIFICATION_MAIL: Record<Locale, NotificationMailTemplate> = {
-  es: notificationEs,
-  en: notificationEn,
-};
+const NOTICE_FRAMES: Record<Locale, NoticeFrames> = { es: noticeEs, en: noticeEn };
 
-export const renderNotificationMail = (
+export function renderNoticeMail(
+  type: OutboxEventType,
   locale: Locale,
   notice: { title: string; body: string },
-): RenderedMail => NOTIFICATION_MAIL[locale](notice);
+): MailContent {
+  const frames = NOTICE_FRAMES[locale];
+  const { intro, tone } = frames.byType[type] ?? frames.generic;
+  return {
+    subject: `${notice.title} - UTS Tutorías`,
+    title: notice.title,
+    tone,
+    blocks: [intro, ...notice.body.split(/\n+/)].map((text) => ({ kind: 'p' as const, text })),
+  };
+}
 
 // The test email of the settings screen (FR-028): short, in the language of the CAE who asks.
 export const renderSmtpTestMail = (locale: Locale): RenderedMail =>
