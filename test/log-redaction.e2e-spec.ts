@@ -7,7 +7,11 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createUser, TEST_PASSWORD } from './utils/factories.js';
+import { causeOf, DeliveriesService } from '../src/notifications/deliveries.service.js';
+import { loginStudent } from './utils/enrollment.js';
+import { createEnrollment, createOutboxEvent, createUser, TEST_PASSWORD } from './utils/factories.js';
+import { teacherApi } from './utils/teacher.js';
+import { seriesModule, start } from './utils/teacher-fixture.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
 
 describe('logs never contain secrets', () => {
@@ -115,5 +119,56 @@ describe('logs never contain secrets', () => {
     for (const secret of secrets) expect(secret).toBeTruthy();
     for (const secret of secrets)
       expect(output, `log leaked ${secret.slice(0, 4)}…`).not.toContain(secret);
+  });
+
+  // Spec 014: the consumer, the deliveries and the mail settings log ids, types and stable causes only.
+  it('keeps the mail password, addresses, device tokens and the text of notices out of the logs', async () => {
+    const period = await start(ctx);
+    const m = await seriesModule(ctx, period.id);
+    const student = await loginStudent(ctx);
+    await createEnrollment(ctx.prisma, { studentId: student.user.id, moduleId: m.module.id });
+    const cae = await createUser(ctx.prisma, { role: 'SUPERADMIN' });
+    const caeLogin = await post('/auth/login', { email: cae.email, password: TEST_PASSWORD });
+    const caeToken = caeLogin.body.accessToken as string;
+    const device = 'ExponentPushToken[log-redaction-device]';
+    const smtpPassword = 'clave-smtp-muy-secreta';
+
+    await ctx
+      .http()
+      .put('/api/v1/notifications/devices')
+      .set('Authorization', `Bearer ${student.token}`)
+      .send({ token: device, platform: 'ANDROID' });
+    await ctx
+      .http()
+      .put('/api/v1/settings/smtp')
+      .set('Authorization', `Bearer ${caeToken}`)
+      .send({ host: 'smtp.uts.edu.co', port: 587, user: 'cae-usuario', password: smtpPassword, from: 'cae@uts.edu.co' })
+      .expect(200);
+    await post('/settings/smtp/test', {}, caeToken);
+    ctx.smtp.failNext = { count: 1, code: 'EAUTH' };
+    await post('/settings/smtp/test', {}, caeToken);
+
+    await teacherApi(ctx, m.teacher).cancel(m.sessions[0][0].id, { scope: 'SESSION' }).expect(200);
+    await ctx.runOutbox();
+    const notice = await ctx.prisma.notification.findFirstOrThrow({ where: { userId: student.user.id } });
+    const row = await ctx.prisma.smtpConfig.findFirstOrThrow();
+    const deliveries = ctx.app.get(DeliveriesService);
+    const push = await ctx.prisma.notificationDelivery.findFirstOrThrow({ where: { channel: 'PUSH', notificationId: notice.id } });
+    const email = await ctx.prisma.notificationDelivery.findFirstOrThrow({ where: { channel: 'EMAIL', notificationId: notice.id } });
+    ctx.push.failNext = 1;
+    await deliveries.deliverPush(push.id).catch((error: unknown) => deliveries.markFailed(push.id, causeOf(error)));
+    ctx.smtp.failNext = { count: 1, code: 'EAUTH' };
+    await deliveries.deliverEmail(email.id).catch((error: unknown) => deliveries.markFailed(email.id, causeOf(error)));
+    // An event that cannot be resolved is reported too.
+    await createOutboxEvent(ctx.prisma, {
+      type: 'MODULE_ROOM_CHANGED',
+      moduleId: m.module.id,
+      payload: { fromRoomId: m.room.id, toRoomId: '00000000-0000-4000-8000-000000000000', enrolled: 1 },
+    });
+    await ctx.runOutbox();
+
+    expect(output).toContain('Delivery failed');
+    const secrets = [smtpPassword, row.passwordEncrypted, student.user.email, device, notice.title, notice.body, 'cae-usuario'];
+    for (const secret of secrets) expect(output, `log leaked ${secret.slice(0, 6)}…`).not.toContain(secret);
   });
 });

@@ -86,18 +86,30 @@ export class SessionService {
     return session;
   }
 
-  revoke(sessionId: string) {
-    return this.prisma.session.updateMany({
+  // Ending a session also drops the push devices registered with it (FR-016), so a signed-out phone
+  // stops receiving notices even if the app never asked for it.
+  async revoke(sessionId: string) {
+    const revoked = await this.prisma.session.updateMany({
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: this.clock.now() },
     });
+    await this.prisma.pushToken.updateMany({
+      where: { sessionId, deletedAt: null },
+      data: { deletedAt: this.clock.now() },
+    });
+    return revoked;
   }
 
-  revokeAllForUser(userId: string) {
-    return this.prisma.session.updateMany({
+  async revokeAllForUser(userId: string) {
+    const revoked = await this.prisma.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: this.clock.now() },
     });
+    await this.prisma.pushToken.updateMany({
+      where: { userId, deletedAt: null },
+      data: { deletedAt: this.clock.now() },
+    });
+    return revoked;
   }
 
   private assertUsable(session: SessionWithUser) {

@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 
-// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions, 011-student-enrollment and 012-teacher-sessions contracts; the app translates them.
+// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions, 011-student-enrollment, 012-teacher-sessions and 014-notifications contracts; the app translates them.
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
   'EMAIL_ALREADY_REGISTERED',
@@ -63,6 +63,9 @@ export const ERROR_CODES = [
   'HOLIDAY_DATE_TAKEN',
   'HOLIDAY_IN_PAST',
   'HOLIDAYS_IMPORT_UNAVAILABLE',
+  'NOTIFICATION_NOT_FOUND',
+  'SMTP_PASSWORD_REQUIRED',
+  'SMTP_NOT_CONFIGURED',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

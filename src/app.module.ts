@@ -7,6 +7,7 @@ import { ConfigUsageModule } from './config-usage/config-usage.module.js';
 import { EnrollmentsModule } from './enrollments/enrollments.module.js';
 import { HolidaysModule } from './holidays/holidays.module.js';
 import { ModulesModule } from './modules/modules.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
 import { OutboxModule } from './outbox/outbox.module.js';
 import { PeriodsModule } from './periods/periods.module.js';
 import { RoomsModule } from './rooms/rooms.module.js';
@@ -36,6 +37,7 @@ import { UsersModule } from './users/users.module.js';
     RoomsModule,
     RedisModule,
     MailModule,
+    NotificationsModule,
     AuthModule,
     TeachersModule,
     UsersModule,

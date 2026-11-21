@@ -21,6 +21,10 @@ export interface Env {
   MODULE_LATEST_MINUTE: number;
   STUDENT_CANCEL_LEAD_MINUTES: number;
   TEACHER_CHANGE_LEAD_MINUTES: number;
+  OUTBOX_POLL_SECONDS: number;
+  NOTIFICATION_DELIVERY_ATTEMPTS: number;
+  NOTIFICATION_BACKOFF_SECONDS: number;
+  NOTIFICATION_SWEEP_SECONDS: number;
 }
 
 const required = [
@@ -78,6 +82,14 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
   if (!Number.isInteger(changeLead) || changeLead <= 0)
     throw new Error('TEACHER_CHANGE_LEAD_MINUTES must be a positive integer');
 
+  // Notifications (spec 014): outbox polling, delivery retries and the sweep of pending deliveries.
+  const positiveInt = (key: string, fallback: number) => {
+    const value = num(key, fallback);
+    if (!Number.isInteger(value) || value <= 0)
+      throw new Error(`${key} must be a positive integer`);
+    return value;
+  };
+
   return {
     PORT: num('PORT', 3000),
     DATABASE_URL: str('DATABASE_URL'),
@@ -87,7 +99,7 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     SMTP_ENCRYPTION_KEY: str('SMTP_ENCRYPTION_KEY'),
     REDIS_HOST: str('REDIS_HOST', 'localhost'),
     REDIS_PORT: num('REDIS_PORT', 6379),
-    SMTP_HOST: str('SMTP_HOST', 'localhost'),
+    SMTP_HOST: str('SMTP_HOST'),
     SMTP_PORT: num('SMTP_PORT', 1025),
     SMTP_USER: str('SMTP_USER'),
     SMTP_PASSWORD: str('SMTP_PASSWORD'),
@@ -101,5 +113,9 @@ export function validateEnv(raw: Record<string, string | undefined>): Env {
     MODULE_LATEST_MINUTE: latest,
     STUDENT_CANCEL_LEAD_MINUTES: cancelLead,
     TEACHER_CHANGE_LEAD_MINUTES: changeLead,
+    OUTBOX_POLL_SECONDS: positiveInt('OUTBOX_POLL_SECONDS', 5),
+    NOTIFICATION_DELIVERY_ATTEMPTS: positiveInt('NOTIFICATION_DELIVERY_ATTEMPTS', 8),
+    NOTIFICATION_BACKOFF_SECONDS: positiveInt('NOTIFICATION_BACKOFF_SECONDS', 15),
+    NOTIFICATION_SWEEP_SECONDS: positiveInt('NOTIFICATION_SWEEP_SECONDS', 60),
   };
 }

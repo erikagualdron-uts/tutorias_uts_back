@@ -39,3 +39,22 @@ describe('TEACHER_CHANGE_LEAD_MINUTES', () => {
     );
   });
 });
+
+describe.each([
+  ['OUTBOX_POLL_SECONDS', 5],
+  ['NOTIFICATION_DELIVERY_ATTEMPTS', 8],
+  ['NOTIFICATION_BACKOFF_SECONDS', 15],
+  ['NOTIFICATION_SWEEP_SECONDS', 60],
+] as const)('%s', (key, fallback) => {
+  it(`defaults to ${fallback}`, () => {
+    expect(validateEnv(base)[key]).toBe(fallback);
+  });
+
+  it('accepts a positive integer', () => {
+    expect(validateEnv({ ...base, [key]: '30' })[key]).toBe(30);
+  });
+
+  it.each(['0', '-5', 'abc', '1.5'])('rejects %s', (value) => {
+    expect(() => validateEnv({ ...base, [key]: value })).toThrow(`${key} must be a positive integer`);
+  });
+});
