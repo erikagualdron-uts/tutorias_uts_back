@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MailBrand } from '../brand.js';
-import { COLORS, composeMail, escapeHtml, LOGO_CID, TONES, type MailContent } from './layout.js';
+import { COLORS, composeMail, escapeHtml, FONTS, LOGO_CID, TONES, type MailContent } from './layout.js';
 
 const brand: MailBrand = { name: 'Institución Universitaria Tecnológica de Santander – UTS', contactEmail: 'cae@uts.edu.co', footerText: 'Mensaje automático.' };
 const content: MailContent = {
@@ -114,6 +114,20 @@ describe('what the mail checker flags and the screen readers need', () => {
     const sizes = [...html.matchAll(/font-size:(\d+)px/g)].map((m) => Number(m[1])).filter((size) => size > 1);
     expect(Math.min(...sizes)).toBeGreaterThanOrEqual(12);
     expect(html).toMatch(/font-size:16px;line-height:24px/);
+  });
+
+  it('asks for the corporate fonts first and ends each stack with a generic family, so it never depends on one font', () => {
+    const stacks = new Set([...html.matchAll(/font-family:([^;"]+(?:'[^']+'[^;"]*)*)/g)].map((m) => m[1]));
+    expect([...stacks].sort()).toEqual([FONTS.code, FONTS.text].sort());
+    expect(FONTS.text.startsWith("'Myriad Pro', 'Source Sans 3'")).toBe(true);
+    expect(FONTS.code.startsWith("'Source Code Pro'")).toBe(true);
+    expect(FONTS.text.endsWith('sans-serif') && FONTS.code.endsWith('monospace')).toBe(true);
+  });
+
+  it('writes the code in the monospaced stack and every other text in the text stack', () => {
+    const codeBox = html.split('>123456<')[0].split('<td ').pop()!;
+    expect(codeBox).toContain(`font-family:${FONTS.code}`);
+    expect(html.match(new RegExp(`font-family:${FONTS.text.replace(/[()]/g, '\\$&')}`, 'g'))!.length).toBeGreaterThanOrEqual(5);
   });
 
   it('keeps every text and background pair at AA contrast (4.5:1)', () => {

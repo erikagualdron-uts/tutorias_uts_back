@@ -48,9 +48,15 @@ export const TONES: Record<Tone, { accent: string; fill: string; ink: string }> 
   success: { accent: COLORS.success, fill: COLORS.success, ink: COLORS.deep },
 };
 
-// Email clients ignore web fonts, so these are the only places a font name is written (D-102).
-const FONT = 'Arial, Helvetica, sans-serif';
-const MONO = "'Courier New', Courier, monospace";
+// A mail client shows only fonts already installed on the reader's device and most ignore web fonts,
+// so each stack lists the corporate font first and safe ones after it. This is the one place a font
+// name is written, and the way to change the font of every email (D-103).
+export const FONTS = {
+  text: "'Myriad Pro', 'Source Sans 3', Arial, Helvetica, sans-serif",
+  code: "'Source Code Pro', 'Courier New', Courier, monospace",
+} as const;
+const FONT = FONTS.text;
+const MONO = FONTS.code;
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
