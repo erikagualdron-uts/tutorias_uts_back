@@ -1,6 +1,7 @@
 import type { Locale, OutboxEventType, Prisma, Role } from '@prisma/client';
 import argon2 from 'argon2';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
+import type { TestContext } from './test-app.js';
 
 export const TEST_PASSWORD = 'Clave1234';
 
@@ -199,6 +200,16 @@ export function createHoliday(
       deletedAt: overrides.deletedAt ?? null,
     },
   });
+}
+
+// Signs in a fresh SUPERADMIN and returns its access token.
+export async function createAdminSession(ctx: Pick<TestContext, 'prisma' | 'http'>) {
+  const admin = await createUser(ctx.prisma, { role: 'SUPERADMIN' });
+  const res = await ctx
+    .http()
+    .post('/api/v1/auth/login')
+    .send({ email: admin.email, password: TEST_PASSWORD });
+  return { admin, token: res.body.accessToken as string };
 }
 
 export async function createStudent(

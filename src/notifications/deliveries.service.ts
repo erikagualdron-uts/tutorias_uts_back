@@ -27,6 +27,9 @@ export class EmailSendError extends Error {
   }
 }
 
+// A deactivated or deleted account gets nothing, not even a notice created before it was closed (FR-013).
+const unavailable = (user: { status: string; deletedAt: Date | null }) => user.status !== 'ACTIVE' || user.deletedAt !== null;
+
 export interface ReceiptEntry {
   ticketId: string;
   token: string;
@@ -63,9 +66,10 @@ export class DeliveriesService {
   async deliverPush(deliveryId: string): Promise<void> {
     const delivery = await this.prisma.notificationDelivery.findFirst({
       where: { id: deliveryId, channel: 'PUSH', status: 'PENDING' },
-      include: { notification: true },
+      include: { notification: { include: { user: { select: { status: true, deletedAt: true } } } } },
     });
     if (!delivery) return;
+    if (unavailable(delivery.notification.user)) return this.finish(delivery.id, 'SKIPPED', 'ACCOUNT_UNAVAILABLE');
     const notice = delivery.notification;
     const now = this.clock.now();
     // A device counts only while its session is alive; the sign-out drops it, this covers the rest.
@@ -111,10 +115,11 @@ export class DeliveriesService {
   async deliverEmail(deliveryId: string): Promise<void> {
     const delivery = await this.prisma.notificationDelivery.findFirst({
       where: { id: deliveryId, channel: 'EMAIL', status: 'PENDING' },
-      include: { notification: { include: { user: { select: { email: true } } } } },
+      include: { notification: { include: { user: { select: { email: true, status: true, deletedAt: true } } } } },
     });
     if (!delivery) return;
     const { notification, notification: { user } } = delivery;
+    if (unavailable(user)) return this.finish(delivery.id, 'SKIPPED', 'ACCOUNT_UNAVAILABLE');
     const domain = await this.settings.get('auth.studentEmailDomain');
     if (!user.email || !hasEmailDomain(user.email, domain)) return this.finish(delivery.id, 'SKIPPED', 'EMAIL_DOMAIN_NOT_ALLOWED');
 
