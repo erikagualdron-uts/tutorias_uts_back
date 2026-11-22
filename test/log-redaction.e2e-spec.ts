@@ -11,6 +11,9 @@ import { causeOf, DeliveriesService } from '../src/notifications/deliveries.serv
 import { loginStudent } from './utils/enrollment.js';
 import { createEnrollment, createOutboxEvent, createPqrs, createUser, TEST_PASSWORD } from './utils/factories.js';
 import { adminCaller, pqrsBody, studentCaller } from './utils/pqrs.js';
+import { ChatRetentionTask } from '../src/chat/chat-retention.task.js';
+import { createChatMessage } from './utils/chat.js';
+import { chatWorld, directWith, messageBody, moduleChatOf } from './utils/chat-world.js';
 import { teacherApi } from './utils/teacher.js';
 import { seriesModule, start } from './utils/teacher-fixture.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
@@ -195,5 +198,26 @@ describe('logs never contain secrets', () => {
 
     for (const text of [description, reply]) expect(output, `log leaked ${text}`).not.toContain(text);
     expect(output.split(subject).length - 1, 'the subject only appears in the notice, never in a log line').toBe(0);
+  });
+  // Spec 018: sending, announcing, pushing (also when it fails) and the retention log counts, never text.
+  it('keeps the text of chat messages and of their push out of the logs', async () => {
+    const { student, teacher, module } = await chatWorld(ctx);
+    const secrets = ['Mensaje-privado-chat-1', 'Anuncio-privado-chat-2', 'Mensaje-viejo-chat-3'];
+    await ctx.http().put('/api/v1/notifications/devices').set('Authorization', `Bearer ${teacher.token}`).send({ token: 'ExponentPushToken[log-chat]', platform: 'ANDROID' });
+    const direct = await directWith(student, teacher);
+    const body = messageBody({ body: secrets[0] });
+    await student.post(`/chat/conversations/${direct.id}/messages`, body);
+    await student.post(`/chat/conversations/${direct.id}/messages`, body);
+    ctx.push.failNext = 1;
+    await student.post(`/chat/conversations/${direct.id}/messages`, messageBody({ body: secrets[0] }));
+    await student.post(`/chat/conversations/${direct.id}/messages`, messageBody({ body: '' }));
+    const group = await moduleChatOf(teacher, module.id);
+    await teacher.post(`/chat/conversations/${group}/messages`, messageBody({ body: secrets[1], kind: 'ANNOUNCEMENT' }));
+    await student.post(`/chat/conversations/${direct.id}/read`);
+    await createChatMessage(ctx.prisma, { conversationId: direct.id, senderId: student.user.id, body: secrets[2], createdAt: new Date('2020-01-01T00:00:00Z') });
+    await ctx.app.get(ChatRetentionTask).run();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    for (const text of secrets) expect(output, `log leaked ${text}`).not.toContain(text);
   });
 });

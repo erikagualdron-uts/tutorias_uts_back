@@ -369,8 +369,10 @@ export async function createTestApp(): Promise<TestContext> {
     smtp.reset();
     logs.reset();
     deliveryQueue.reset();
-    const keys = await redis.keys('login:*');
-    if (keys.length) await redis.del(keys);
+    for (const pattern of ['login:*', 'chat:*']) {
+      const keys = await redis.keys(pattern);
+      if (keys.length) await redis.del(keys);
+    }
     mailbox.clear();
     clock.reset();
   };
