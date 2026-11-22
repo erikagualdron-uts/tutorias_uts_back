@@ -11,6 +11,7 @@ import { ModulesModule } from './modules/modules.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { OutboxModule } from './outbox/outbox.module.js';
 import { PeriodsModule } from './periods/periods.module.js';
+import { PqrsModule } from './pqrs/pqrs.module.js';
 import { RoomsModule } from './rooms/rooms.module.js';
 import { validateEnv } from './config/env.js';
 import { MailModule } from './mail/mail.module.js';
@@ -40,6 +41,7 @@ import { UsersModule } from './users/users.module.js';
     RedisModule,
     MailModule,
     NotificationsModule,
+    PqrsModule,
     AuthModule,
     AccountsModule,
     TeachersModule,

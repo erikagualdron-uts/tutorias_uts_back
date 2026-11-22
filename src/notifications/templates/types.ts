@@ -15,6 +15,8 @@ export interface NotificationContext {
   scope: 'SESSION' | 'SERIES' | null;
   teacherName: string | null;
   roomName: string | null;
+  // Subject of the PQRS a notice is about; null in module notices.
+  pqrsSubject: string | null;
 }
 
 export interface Rendered {

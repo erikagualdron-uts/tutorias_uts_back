@@ -8,6 +8,7 @@ const view = (n: Notification) => ({
   id: n.id,
   type: n.type,
   moduleId: n.moduleId,
+  pqrsId: n.pqrsId,
   title: n.title,
   body: n.body,
   readAt: n.readAt,

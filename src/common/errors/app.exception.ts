@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 
-// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions, 011-student-enrollment, 012-teacher-sessions 014-notifications and 016-account-management contracts; the app translates them.
+// Stable codes from specs/001-auth-roles, 006-cae-configuration, 010-modules-sessions, 011-student-enrollment, 012-teacher-sessions 014-notifications, 016-account-management and 017-pqrs contracts; the app translates them.
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
   'EMAIL_ALREADY_REGISTERED',
@@ -68,6 +68,11 @@ export const ERROR_CODES = [
   'SMTP_NOT_CONFIGURED',
   'ACCOUNT_NOT_FOUND',
   'ACCOUNT_NOT_ACTIVE',
+  'PQRS_NOT_FOUND',
+  'PQRS_TYPE_UNAVAILABLE',
+  'PQRS_INVALID_TRANSITION',
+  'PQRS_NOT_IN_REVIEW',
+  'PQRS_RESPONSE_REQUIRED',
   'NOT_FOUND',
   'INTERNAL_ERROR',
 ] as const;

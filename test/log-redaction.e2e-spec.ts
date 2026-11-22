@@ -9,7 +9,8 @@ import {
 } from 'vitest';
 import { causeOf, DeliveriesService } from '../src/notifications/deliveries.service.js';
 import { loginStudent } from './utils/enrollment.js';
-import { createEnrollment, createOutboxEvent, createUser, TEST_PASSWORD } from './utils/factories.js';
+import { createEnrollment, createOutboxEvent, createPqrs, createUser, TEST_PASSWORD } from './utils/factories.js';
+import { adminCaller, pqrsBody, studentCaller } from './utils/pqrs.js';
 import { teacherApi } from './utils/teacher.js';
 import { seriesModule, start } from './utils/teacher-fixture.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
@@ -170,5 +171,29 @@ describe('logs never contain secrets', () => {
     expect(output).toContain('Delivery failed');
     const secrets = [smtpPassword, row.passwordEncrypted, student.user.email, device, notice.title, notice.body, 'cae-usuario'];
     for (const secret of secrets) expect(output, `log leaked ${secret.slice(0, 6)}…`).not.toContain(secret);
+  });
+  // Spec 017: filing, answering and resolving a PQRS and noticing its author log ids and causes only.
+  it('keeps the subject, the description and the text of a reply out of the logs', async () => {
+    const me = await studentCaller(ctx);
+    const cae = await adminCaller(ctx);
+    const subject = 'Asunto-confidencial-pqrs';
+    const description = 'Descripcion-confidencial-pqrs';
+    const reply = 'Respuesta-confidencial-pqrs';
+    const filed = await me.post('/pqrs', pqrsBody({ subject, description }));
+    await me.post('/pqrs', pqrsBody({ subject: '', description }));
+    const seeded = await createPqrs(ctx.prisma, { authorId: me.user.id, subject, description });
+    for (const id of [filed.body.id as string, seeded.id]) {
+      await cae.post(`/pqrs/${id}/review`);
+      await cae.post(`/pqrs/${id}/responses`, { body: reply });
+      await cae.post(`/pqrs/${id}/resolve`);
+    }
+    await cae.post(`/pqrs/${filed.body.id}/responses`, { body: reply });
+    await ctx.runOutbox();
+    for (const delivery of await ctx.prisma.notificationDelivery.findMany()) {
+      await ctx.app.get(DeliveriesService)[delivery.channel === 'PUSH' ? 'deliverPush' : 'deliverEmail'](delivery.id);
+    }
+
+    for (const text of [description, reply]) expect(output, `log leaked ${text}`).not.toContain(text);
+    expect(output.split(subject).length - 1, 'the subject only appears in the notice, never in a log line').toBe(0);
   });
 });

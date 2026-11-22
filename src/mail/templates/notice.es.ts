@@ -9,6 +9,9 @@ export const noticeEs: NoticeFrames = {
     SESSION_RESCHEDULED: { tone: 'warning', badge: 'Cambio de hora', intro: 'Hola, una de tus tutorías cambió de hora.' },
     SESSION_CANCELLED_TEACHER: { tone: 'error', badge: 'Cancelada', intro: 'Hola, el docente canceló una de tus tutorías.' },
     SESSION_RESTORED_TEACHER: { tone: 'success', badge: 'Reactivada', intro: 'Hola, el docente reactivó una tutoría que había cancelado.' },
+    PQRS_IN_REVIEW: { tone: 'info', badge: 'PQRS en revisión', intro: 'Hola, el CAE empezó a revisar tu PQRS.' },
+    PQRS_RESPONDED: { tone: 'info', badge: 'Respuesta a tu PQRS', intro: 'Hola, el CAE respondió tu PQRS.' },
+    PQRS_RESOLVED: { tone: 'success', badge: 'PQRS resuelta', intro: 'Hola, el CAE resolvió tu PQRS.' },
   },
   generic: { tone: 'info', badge: 'Novedad', intro: 'Hola, hay una novedad en uno de tus módulos.' },
 };

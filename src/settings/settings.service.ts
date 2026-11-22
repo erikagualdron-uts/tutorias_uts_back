@@ -13,6 +13,9 @@ export interface SettingValues {
   'auth.resendMaxPerHour': number;
   'auth.loginMaxFailures': number;
   'auth.loginLockoutMinutes': number;
+  'pqrs.subjectMaxLength': number;
+  'pqrs.descriptionMaxLength': number;
+  'pqrs.responseMaxLength': number;
 }
 
 export const SETTING_DEFAULTS: SettingValues = {
@@ -27,6 +30,9 @@ export const SETTING_DEFAULTS: SettingValues = {
   'auth.resendMaxPerHour': 5,
   'auth.loginMaxFailures': 5,
   'auth.loginLockoutMinutes': 15,
+  'pqrs.subjectMaxLength': 120,
+  'pqrs.descriptionMaxLength': 2000,
+  'pqrs.responseMaxLength': 2000,
 };
 
 @Injectable()
