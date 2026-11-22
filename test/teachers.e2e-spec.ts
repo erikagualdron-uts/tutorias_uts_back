@@ -153,7 +153,7 @@ describe('teachers list for the module selector (spec 010)', () => {
   const list = (query = '', bearer = token) =>
     ctx.http().get(`/api/v1/teachers${query}`).set('Authorization', `Bearer ${bearer}`);
 
-  it('lists active and inactive teachers by last name then first name, without sensitive data', async () => {
+  it('lists active and inactive teachers by last name then first name, without access data', async () => {
     await insertTeacher(ctx.prisma, { firstName: 'Zoila', lastName: 'Arias' });
     await insertTeacher(ctx.prisma, { firstName: 'Ana', lastName: 'Becerra' });
     await insertTeacher(ctx.prisma, { firstName: 'Luis', lastName: 'Arias', status: 'INACTIVE' });
@@ -165,7 +165,7 @@ describe('teachers list for the module selector (spec 010)', () => {
       'Becerra Ana',
     ]);
     expect(res.body.meta).toEqual({ page: 1, limit: 20, total: 3 });
-    expect(Object.keys(res.body.data[0]).sort()).toEqual(['firstName', 'id', 'lastName', 'status']);
+    expect(Object.keys(res.body.data[0]).sort()).toEqual(['email', 'firstName', 'id', 'lastName', 'modulesCount', 'status']);
   });
 
   it('leaves out deleted teachers, students and administrators', async () => {

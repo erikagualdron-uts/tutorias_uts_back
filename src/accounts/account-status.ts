@@ -31,13 +31,14 @@ export class AccountStatusService {
     });
     if (!user)
       throw new AppException(404, 'ACCOUNT_NOT_FOUND', 'Account not found');
-    await tx.user.update({
+    const updated = await tx.user.update({
       where: { id: userId },
       data:
         action === 'delete'
           ? { deletedAt: this.clock.now() }
           : { status: action === 'deactivate' ? 'INACTIVE' : 'ACTIVE' },
     });
+    return updated.status;
   }
 
   // After the change is committed: the user loses refresh tokens and push devices.

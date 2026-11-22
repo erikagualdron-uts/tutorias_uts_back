@@ -39,7 +39,12 @@ export class EnrollmentsService {
         if (period.status !== 'ACTIVE') {
           throw new AppException(409, 'ENROLLMENT_PERIOD_NOT_OPEN', 'Enrollment is open for the active period only');
         }
-        await tx.$queryRaw`SELECT id FROM users WHERE id = ${studentId}::uuid FOR UPDATE`;
+        const [student] = await tx.$queryRaw<{ status: string; deleted_at: Date | null }[]>`
+          SELECT status, deleted_at FROM users WHERE id = ${studentId}::uuid FOR UPDATE`;
+        // A deactivation that committed after the guard checked the session (spec 016).
+        if (!student || student.status !== 'ACTIVE' || student.deleted_at) {
+          throw new AppException(401, 'ACCOUNT_DISABLED', 'Account disabled');
+        }
         await lockModule(tx, moduleId, period.id);
         const module = await tx.module.findFirstOrThrow({
           where: { id: moduleId },
