@@ -43,7 +43,7 @@ describe('CAE dashboard (spec 019)', () => {
       const normal = await moduleWith(period.id, 10, 5);
       const inactive = await createStudent(ctx.prisma, { status: 'INACTIVE' });
       await createEnrollment(ctx.prisma, { studentId: inactive.id, moduleId: normal.module.id });
-      const closed = await createPeriod(ctx.prisma, { status: 'CLOSED' });
+      const closed = await createPeriod(ctx.prisma, { status: 'CLOSED', startsOn: '2029-01-01', endsOn: '2029-06-30' });
       await moduleWith(closed.id, 10, 10); // other period: ignored
 
       const { body } = await admin.get('/dashboard/admin/overview');
