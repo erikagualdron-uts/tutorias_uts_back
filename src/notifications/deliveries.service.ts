@@ -4,9 +4,10 @@ import type { DeliveryStatus } from '@prisma/client';
 import { Clock } from '../common/clock.js';
 import type { Env } from '../config/env.js';
 import { hasEmailDomain } from '../common/email.util.js';
+import { MessageBuilder } from '../mail/message.js';
 import { SmtpConfigService } from '../mail/smtp-config.service.js';
 import { smtpCause } from '../mail/smtp-errors.js';
-import { renderNotificationMail } from '../mail/templates/index.js';
+import { renderNoticeMail } from '../mail/templates/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { DeliveryQueue } from './delivery-queue.js';
@@ -53,6 +54,7 @@ export class DeliveriesService {
     private readonly queue: DeliveryQueue,
     @Inject(PUSH_GATEWAY) private readonly push: PushGateway,
     private readonly smtp: SmtpConfigService,
+    private readonly messages: MessageBuilder,
     private readonly settings: SettingsService,
     private readonly config: ConfigService<Env, true>,
   ) {}
@@ -123,9 +125,9 @@ export class DeliveriesService {
       return;
     }
     await this.prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { attempts: { increment: 1 } } });
-    const { subject, text } = renderNotificationMail(notification.locale, notification);
+    const content = renderNoticeMail(notification.type, notification.locale, notification);
     try {
-      await mail.transport.sendMail({ from: mail.from, to: user.email, subject, text });
+      await mail.transport.sendMail(this.messages.build(mail.from, user.email, content));
     } catch (error) {
       throw new EmailSendError(smtpCause(error));
     }

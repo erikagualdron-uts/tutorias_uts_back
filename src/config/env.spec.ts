@@ -8,6 +8,21 @@ const base = {
   SMTP_ENCRYPTION_KEY: 'c'.repeat(64),
 };
 
+describe('email brand', () => {
+  it('defaults to the official name with no contact and no footer', () => {
+    const env = validateEnv(base);
+    expect(env.MAIL_BRAND_NAME).toBe('Institución Universitaria Tecnológica de Santander – UTS');
+    expect(env.MAIL_CONTACT_EMAIL).toBe('');
+    expect(env.MAIL_FOOTER_TEXT).toBe('');
+  });
+
+  it('reads the values and ignores a blank name', () => {
+    const env = validateEnv({ ...base, MAIL_BRAND_NAME: 'UTS', MAIL_CONTACT_EMAIL: ' cae@uts.edu.co ', MAIL_FOOTER_TEXT: 'Aviso' });
+    expect([env.MAIL_BRAND_NAME, env.MAIL_CONTACT_EMAIL, env.MAIL_FOOTER_TEXT]).toEqual(['UTS', 'cae@uts.edu.co', 'Aviso']);
+    expect(validateEnv({ ...base, MAIL_BRAND_NAME: '  ' }).MAIL_BRAND_NAME).toContain('Santander');
+  });
+});
+
 describe('STUDENT_CANCEL_LEAD_MINUTES', () => {
   it('defaults to 60', () => {
     expect(validateEnv(base).STUDENT_CANCEL_LEAD_MINUTES).toBe(60);

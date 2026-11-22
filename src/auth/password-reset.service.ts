@@ -26,16 +26,17 @@ export class PasswordResetService {
   async forgot(rawEmail: string) {
     const user = await this.activeUser(rawEmail);
     if (user) {
-      const { code, resendAvailableAt } = await this.codes.issue(
+      const { code, expiresAt, resendAvailableAt } = await this.codes.issue(
         user.id,
         'PASSWORD_RESET',
       );
-      if (code)
+      if (code && expiresAt)
         await this.mail.sendCode({
           to: user.email,
           template: 'reset',
           locale: user.locale,
           code,
+          expiresAt: expiresAt.toISOString(),
         });
       return { resendAvailableAt };
     }

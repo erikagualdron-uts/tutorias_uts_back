@@ -1,6 +1,16 @@
+import { formatDateTime } from '../../notifications/templates/format.js';
 import type { MailTemplate } from './index.js';
 
-export const verificationEs: MailTemplate = (code) => ({
+export const verificationEs: MailTemplate = ({ code, expiresAt }) => ({
   subject: 'Verifica tu correo - UTS Tutorías',
-  text: `Tu código de verificación es ${code}.\n\nEscríbelo en la app para activar tu cuenta. Si no creaste una cuenta, ignora este mensaje.`,
+  lang: 'es',
+  badge: 'Verifica tu cuenta',
+  title: 'Verifica tu correo',
+  tone: 'info',
+  blocks: [
+    { kind: 'p', text: 'Escribe este código en la app para activar tu cuenta:' },
+    { kind: 'code', text: code },
+    { kind: 'note', text: `El código vence el ${formatDateTime(expiresAt, 'es')} (hora de Bogotá).` },
+    { kind: 'p', text: 'Si no creaste una cuenta, ignora este mensaje.' },
+  ],
 });

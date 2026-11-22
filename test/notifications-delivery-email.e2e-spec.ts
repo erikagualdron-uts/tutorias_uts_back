@@ -5,7 +5,7 @@ import { causeOf, DeliveriesService, EmailSendError } from '../src/notifications
 import { SmtpConfigService } from '../src/mail/smtp-config.service.js';
 import { createEnrollment, createStudent } from './utils/factories.js';
 import { teacherApi } from './utils/teacher.js';
-import { seriesModule, start } from './utils/teacher-fixture.js';
+import { seriesModule, start, week } from './utils/teacher-fixture.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
 
 // The email channel of a notice (FR-018 to FR-020 and FR-022): the language of the student, Bogota
@@ -64,8 +64,31 @@ describe('notifications: email delivery', () => {
     await deliveries.deliverEmail((await emailOf(students[0].id)).id);
     const [mail] = ctx.smtp.to(students[0].email);
     expect(mail.subject).toBe('Your session was cancelled - UTS Tutorías');
-    expect(mail.text).toMatch(/^Hello,/);
+    expect(mail.text).toContain('Hello,');
     expect(mail.text).toMatch(/Tuesday, January 8 at 2:00\s*PM/);
+  });
+
+  it('sends a different email for a move, a cancellation and a restore, with the logo and the Bogota time (spec 015)', async () => {
+    const { m, students } = await scenario([{ locale: 'es' }]);
+    const api = teacherApi(ctx, m.teacher);
+    const first = m.sessions[0][0].id;
+    await api.reschedule(first, { scope: 'SESSION', startsAt: week(0, 19, 1).toISOString() }).expect(200);
+    await api.cancel(first, { scope: 'SESSION' }).expect(200);
+    await api.restore(first, { scope: 'SESSION' }).expect(200);
+    await ctx.runOutbox();
+
+    const notices = await ctx.prisma.notificationDelivery.findMany({ where: { channel: 'EMAIL', notification: { userId: students[0].id } }, orderBy: { createdAt: 'asc' } });
+    for (const delivery of notices) await deliveries.deliverEmail(delivery.id);
+
+    const mails = ctx.smtp.to(students[0].email);
+    expect(mails).toHaveLength(3);
+    expect(new Set(mails.map((mail) => mail.subject)).size).toBe(3);
+    for (const mail of mails) {
+      expect(mail.html).toContain('cid:uts-logo');
+      expect(mail.attachments?.[0]).toMatchObject({ cid: 'uts-logo' });
+      expect(mail.html).toContain('Cálculo I');
+      expect(mail.text).toMatch(/p\.\s*m\.|a\.\s*m\./i);
+    }
   });
 
   it('retries a temporary failure with a stable cause and sends once when the server is back (scenario 2)', async () => {

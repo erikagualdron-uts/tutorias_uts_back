@@ -36,6 +36,10 @@ describe('renderNotification', () => {
     expect(body.length).toBeLessThanOrEqual(1000);
   });
 
+  it('never doubles the full stop after a date that ends in an abbreviation ("p. m.")', () => {
+    for (const type of TYPES) for (const locale of LOCALES) expect(renderNotification(type, locale, context()).body).not.toMatch(/[^.]\.\.(?!\.)/);
+  });
+
   it('writes the same event in each language', () => {
     const es = renderNotification('SESSION_CANCELLED_TEACHER', 'es', context());
     const en = renderNotification('SESSION_CANCELLED_TEACHER', 'en', context());
