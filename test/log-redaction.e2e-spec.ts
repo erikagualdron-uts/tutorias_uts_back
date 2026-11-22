@@ -214,6 +214,19 @@ describe('logs never contain secrets', () => {
     expect(output).not.toContain(subject);
     expect(output).not.toContain(me.user.email);
   });
+  // Spec 021: the student calendar only reads; names of modules, teachers and rooms never reach the logs.
+  it('keeps module names, teachers and the student out of the logs when the calendar is read', async () => {
+    const p = await start(ctx); // moves the clock to 2030: sign in after it
+    const me = await studentCaller(ctx);
+    const name = 'Modulo-confidencial-calendario';
+    const m = await seriesModule(ctx, p.id, { weeks: 1, name });
+    await createEnrollment(ctx.prisma, { studentId: me.user.id, moduleId: m.module.id });
+    const teacher = await ctx.prisma.teacherProfile.findFirstOrThrow({ where: { userId: m.teacher.user.id } });
+
+    expect((await me.get('/student/calendar?from=2030-01-07&to=2030-01-13')).body.data).toHaveLength(1);
+    await me.get('/student/calendar?from=hoy&to=2030-01-13'); // refused: still nothing in the logs
+    for (const text of [name, teacher.lastName, me.user.email]) expect(output, `log leaked ${text}`).not.toContain(text);
+  });
   // Spec 018: sending, announcing, pushing (also when it fails) and the retention log counts, never text.
   it('keeps the text of chat messages and of their push out of the logs', async () => {
     const { student, teacher, module } = await chatWorld(ctx);
