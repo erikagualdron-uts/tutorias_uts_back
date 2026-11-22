@@ -23,6 +23,13 @@ describe('SettingsService', () => {
     expect(SETTING_DEFAULTS['chat.messageMaxLength']).toBeLessThanOrEqual(4000);
   });
 
+  it('has the dashboard default: low enrollment under 30 % of the seats (spec 019)', async () => {
+    const prisma = { setting: { findUnique: () => Promise.resolve(null) } };
+    expect(await new SettingsService(prisma as never).get('dashboard.lowEnrollmentPercent')).toBe(30);
+    expect(SETTING_DEFAULTS['dashboard.lowEnrollmentPercent']).toBeGreaterThan(0);
+    expect(SETTING_DEFAULTS['dashboard.lowEnrollmentPercent']).toBeLessThanOrEqual(100);
+  });
+
   it('keeps the pqrs limits under the physical column sizes', () => {
     expect(SETTING_DEFAULTS['pqrs.subjectMaxLength']).toBeLessThanOrEqual(200);
     expect(SETTING_DEFAULTS['pqrs.descriptionMaxLength']).toBeLessThanOrEqual(4000);

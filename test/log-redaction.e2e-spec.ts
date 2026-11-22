@@ -199,6 +199,21 @@ describe('logs never contain secrets', () => {
     for (const text of [description, reply]) expect(output, `log leaked ${text}`).not.toContain(text);
     expect(output.split(subject).length - 1, 'the subject only appears in the notice, never in a log line').toBe(0);
   });
+  // Spec 019: the dashboards only read; they log nothing about people, PQRS or messages.
+  it('keeps PQRS subjects and module names out of the logs when the dashboards are read', async () => {
+    const me = await studentCaller(ctx);
+    const cae = await adminCaller(ctx);
+    const subject = 'Asunto-confidencial-dashboard';
+    await createPqrs(ctx.prisma, { authorId: me.user.id, subject });
+    for (const caller of [me, cae]) {
+      await caller.get(caller === me ? '/dashboard/student' : '/dashboard/admin/overview');
+    }
+    await cae.get('/dashboard/admin/changes');
+    await cae.get('/dashboard/admin/rooms');
+    await me.get('/dashboard/teacher'); // refused: still no text in the logs
+    expect(output).not.toContain(subject);
+    expect(output).not.toContain(me.user.email);
+  });
   // Spec 018: sending, announcing, pushing (also when it fails) and the retention log counts, never text.
   it('keeps the text of chat messages and of their push out of the logs', async () => {
     const { student, teacher, module } = await chatWorld(ctx);
