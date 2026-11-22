@@ -5,6 +5,7 @@ import { ChatBroadcaster } from './chat-broadcaster.js';
 import { ChatPresence } from './chat-presence.js';
 import { ChatPushService } from './chat-push.service.js';
 import { ChatRetentionTask } from './chat-retention.task.js';
+import { ChatTypingLimiter } from './chat-typing.js';
 import { ChatController } from './chat.controller.js';
 import { ChatGateway } from './chat.gateway.js';
 import { ChatService } from './chat.service.js';
@@ -14,6 +15,6 @@ import { ChatService } from './chat.service.js';
 @Module({
   imports: [AuthModule, NotificationsModule],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway, ChatPresence, ChatBroadcaster, ChatPushService, ChatRetentionTask],
+  providers: [ChatService, ChatGateway, ChatPresence, ChatBroadcaster, ChatPushService, ChatRetentionTask, ChatTypingLimiter],
 })
 export class ChatModule {}

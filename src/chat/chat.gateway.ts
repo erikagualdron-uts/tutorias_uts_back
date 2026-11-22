@@ -13,7 +13,10 @@ import { SessionService } from '../auth/session.service.js';
 import { AppException } from '../common/errors/app.exception.js';
 import { ChatBroadcaster } from './chat-broadcaster.js';
 import { ChatPresence } from './chat-presence.js';
+import { ChatTypingLimiter } from './chat-typing.js';
 import { ChatService, type Actor } from './chat.service.js';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Identity {
   userId?: string;
@@ -30,6 +33,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     private readonly chat: ChatService,
     private readonly presence: ChatPresence,
     private readonly broadcaster: ChatBroadcaster,
+    private readonly typingLimiter: ChatTypingLimiter,
   ) {}
 
   afterInit(server: Server) {
@@ -54,6 +58,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   handleDisconnect(socket: Socket) {
     this.presence.drop(socket.id);
+    this.typingLimiter.drop(socket.id);
   }
 
   @SubscribeMessage('conversation:open')
@@ -72,6 +77,24 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   @SubscribeMessage('conversation:close')
   close(@ConnectedSocket() socket: Socket, @MessageBody() body: { conversationId?: string }) {
     if (body?.conversationId) this.presence.close(socket.id, body.conversationId);
+    return { ok: true };
+  }
+
+  // "Is typing" (spec 022): ephemeral and only for a direct chat. It goes to the other person only while they have
+  // the conversation open; the sender always gets `ok` so it cannot learn who is listening. Nothing is saved or logged.
+  @SubscribeMessage('typing')
+  async typing(@ConnectedSocket() socket: Socket, @MessageBody() body: { conversationId?: string }) {
+    const { userId, role } = socket.data as Identity;
+    const conversationId = body?.conversationId;
+    if (!userId || !role || typeof conversationId !== 'string' || !UUID.test(conversationId)) return { ok: true };
+    if (!this.typingLimiter.accept(socket.id, conversationId)) return { ok: true };
+    try {
+      for (const id of await this.chat.typingRecipients({ id: userId, role }, conversationId)) {
+        if (this.presence.isOpen(id, conversationId)) this.broadcaster.typing(id, conversationId, userId);
+      }
+    } catch {
+      // No access to the conversation: the same quiet answer as when nobody is listening.
+    }
     return { ok: true };
   }
 

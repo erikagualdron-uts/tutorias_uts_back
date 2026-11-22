@@ -17,6 +17,11 @@ export class ChatBroadcaster {
     for (const id of userIds) this.server?.to(`user:${id}`).emit('message:new', message);
   }
 
+  // The other person of a direct chat is typing (spec 022). Ephemeral: no text, nothing saved.
+  typing(userId: string, conversationId: string, from: string) {
+    this.server?.to(`user:${userId}`).emit('typing', { conversationId, userId: from });
+  }
+
   unreadChanged(userId: string, unread: number) {
     this.server?.to(`user:${userId}`).emit('unread:changed', { unread });
   }

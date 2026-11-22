@@ -12,7 +12,7 @@ import { loginStudent } from './utils/enrollment.js';
 import { createEnrollment, createOutboxEvent, createPqrs, createUser, TEST_PASSWORD } from './utils/factories.js';
 import { adminCaller, pqrsBody, studentCaller } from './utils/pqrs.js';
 import { ChatRetentionTask } from '../src/chat/chat-retention.task.js';
-import { createChatMessage } from './utils/chat.js';
+import { closeAllChatClients, connectChat, createChatMessage } from './utils/chat.js';
 import { chatWorld, directWith, messageBody, moduleChatOf } from './utils/chat-world.js';
 import { teacherApi } from './utils/teacher.js';
 import { seriesModule, start } from './utils/teacher-fixture.js';
@@ -226,6 +226,28 @@ describe('logs never contain secrets', () => {
     expect((await me.get('/student/calendar?from=2030-01-07&to=2030-01-13')).body.data).toHaveLength(1);
     await me.get('/student/calendar?from=hoy&to=2030-01-13'); // refused: still nothing in the logs
     for (const text of [name, teacher.lastName, me.user.email]) expect(output, `log leaked ${text}`).not.toContain(text);
+  });
+  // Spec 022: the "is typing" notice is ephemeral; neither it nor the conversation it names reaches the logs.
+  it('writes nothing about a typing notice, its conversation or a retried message in the logs', async () => {
+    const { student, teacher } = await chatWorld(ctx);
+    const direct = await directWith(student, teacher);
+    const [mine, theirs] = [await connectChat(ctx, student.token), await connectChat(ctx, teacher.token)];
+    try {
+      await theirs.emitWithAck('conversation:open', { conversationId: direct.id });
+      const before = output.length;
+      await mine.emitWithAck('typing', { conversationId: direct.id });
+      await theirs.waitFor('typing');
+      await mine.emitWithAck('typing', { conversationId: 'not-a-uuid' });
+      const secret = 'Pendiente-privado-chat-4';
+      const body = messageBody({ body: secret });
+      await student.post(`/chat/conversations/${direct.id}/messages`, body);
+      await student.post(`/chat/conversations/${direct.id}/messages`, body); // the retry of a pending message
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const written = output.slice(before);
+      for (const text of [secret, direct.id, 'typing']) expect(written, `log leaked ${text}`).not.toContain(text);
+    } finally {
+      closeAllChatClients();
+    }
   });
   // Spec 018: sending, announcing, pushing (also when it fails) and the retention log counts, never text.
   it('keeps the text of chat messages and of their push out of the logs', async () => {

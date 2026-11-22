@@ -225,6 +225,14 @@ export class ChatService {
     await this.access(me, id);
   }
 
+  // Who should hear that `me` is typing: the other person of a direct chat I can write in. Nobody in a module chat
+  // or in a read-only conversation (spec 022).
+  async typingRecipients(me: Actor, id: string): Promise<string[]> {
+    const { conversation, canWrite } = await this.access(me, id);
+    if (conversation.type !== 'DIRECT' || !canWrite) return [];
+    return conversation.members.filter((m) => m.userId !== me.id && available(m.user)).map((m) => m.userId);
+  }
+
   // ---- delivery after saving ----------------------------------------------------------------------
 
   // Realtime to everyone who can see the message today (and to the other devices of the sender), then the
