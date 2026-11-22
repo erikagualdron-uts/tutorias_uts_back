@@ -9,6 +9,7 @@ import { SmtpConfigService } from '../mail/smtp-config.service.js';
 import { smtpCause } from '../mail/smtp-errors.js';
 import { renderNoticeMail } from '../mail/templates/index.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { liveDevices } from './devices.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { DeliveryQueue } from './delivery-queue.js';
 import { PUSH_GATEWAY, PushUnavailableError, type PushGateway } from './push/push-gateway.js';
@@ -73,10 +74,7 @@ export class DeliveriesService {
     const notice = delivery.notification;
     const now = this.clock.now();
     // A device counts only while its session is alive; the sign-out drops it, this covers the rest.
-    const devices = await this.prisma.pushToken.findMany({
-      where: { userId: notice.userId, deletedAt: null, session: { revokedAt: null, expiresAt: { gt: now } } },
-      select: { id: true, token: true },
-    });
+    const devices = await liveDevices(this.prisma, notice.userId, now);
     if (devices.length === 0) return this.finish(delivery.id, 'SKIPPED', 'PUSH_NO_DEVICES');
 
     await this.prisma.notificationDelivery.update({ where: { id: delivery.id }, data: { attempts: { increment: 1 } } });

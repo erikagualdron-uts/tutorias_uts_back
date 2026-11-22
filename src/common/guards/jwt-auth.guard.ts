@@ -24,6 +24,8 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // The chat socket authenticates when it connects (ChatGateway); its events carry no HTTP headers.
+    if (context.getType() !== 'http') return true;
     if (
       this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [
         context.getHandler(),

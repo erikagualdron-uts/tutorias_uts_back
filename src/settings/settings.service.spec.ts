@@ -15,6 +15,14 @@ describe('SettingsService', () => {
     expect(await new SettingsService(prisma as never).get('pqrs.subjectMaxLength')).toBe(50);
   });
 
+  it('has the chat defaults of the spec 018', () => {
+    expect(SETTING_DEFAULTS['chat.messageMaxLength']).toBe(2000);
+    expect(SETTING_DEFAULTS['chat.directRetentionMonths']).toBe(24);
+    expect(SETTING_DEFAULTS['chat.moduleRetentionMonths']).toBe(6);
+    expect(SETTING_DEFAULTS['chat.pushBurstSeconds']).toBe(60);
+    expect(SETTING_DEFAULTS['chat.messageMaxLength']).toBeLessThanOrEqual(4000);
+  });
+
   it('keeps the pqrs limits under the physical column sizes', () => {
     expect(SETTING_DEFAULTS['pqrs.subjectMaxLength']).toBeLessThanOrEqual(200);
     expect(SETTING_DEFAULTS['pqrs.descriptionMaxLength']).toBeLessThanOrEqual(4000);
