@@ -40,6 +40,14 @@ describe('GET /student/calendar is for students only (spec 021)', () => {
     expect(res.body.code).toBe('VALIDATION_FAILED');
   });
 
+  it('refuses a student whose account was deactivated after signing in', async () => {
+    const student = await studentCaller(ctx);
+    await ctx.prisma.user.update({ where: { id: student.user.id }, data: { status: 'INACTIVE' } });
+    const res = await student.get(`/student/calendar${WEEK}`);
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('ACCOUNT_DISABLED');
+  });
+
   it('never gives a student the sessions of another, even in the same module', async () => {
     const p = await start(ctx);
     const m = await seriesModule(ctx, p.id, { weeks: 1 });
