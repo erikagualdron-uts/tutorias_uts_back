@@ -59,6 +59,35 @@ describe('read my PQRS (spec 017, story 2)', () => {
     expect(res.body.messages.map((m: { body: string }) => m.body)).toEqual(['Primera', 'Segunda']);
   });
 
+  // Spec 020: the author gets the dates of the steps after filing, for the timeline of the detail.
+  it('gives the dates of the steps in the detail: null until each step happens', async () => {
+    const me = await studentCaller(ctx);
+    const filed = await createPqrs(ctx.prisma, { authorId: me.user.id });
+    const inReview = await createPqrs(ctx.prisma, { authorId: me.user.id, status: 'IN_REVIEW' });
+    const resolved = await createPqrs(ctx.prisma, { authorId: me.user.id, status: 'RESOLVED' });
+    const dates = async (id: string) => {
+      const { status, body } = await me.get(`/pqrs/mine/${id}`);
+      expect(status).toBe(200);
+      return { reviewedAt: body.reviewedAt, resolvedAt: body.resolvedAt };
+    };
+
+    expect(await dates(filed.id)).toEqual({ reviewedAt: null, resolvedAt: null });
+    const review = await dates(inReview.id);
+    expect(review.reviewedAt).toBe(inReview.reviewedAt?.toISOString());
+    expect(review.resolvedAt).toBeNull();
+    const done = await dates(resolved.id);
+    expect(done.reviewedAt).toBe(resolved.reviewedAt?.toISOString());
+    expect(done.resolvedAt).toBe(resolved.resolvedAt?.toISOString());
+  });
+
+  it('keeps the list light: the summary of my PQRS still has no step dates', async () => {
+    const me = await studentCaller(ctx);
+    await createPqrs(ctx.prisma, { authorId: me.user.id, status: 'RESOLVED' });
+    const { body } = await me.get('/pqrs/mine');
+    expect(body.data[0]).not.toHaveProperty('reviewedAt');
+    expect(body.data[0]).not.toHaveProperty('resolvedAt');
+  });
+
   it('answers 404 PQRS_NOT_FOUND for the PQRS of another user, a deleted one and an unknown id', async () => {
     const me = await studentCaller(ctx);
     const other = await teacherCaller(ctx);

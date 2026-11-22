@@ -38,7 +38,14 @@ const summary = (p: Row) => ({
   updatedAt: p.updatedAt,
 });
 const messageView = (m: { id: string; body: string; createdAt: Date }) => ({ id: m.id, body: m.body, createdAt: m.createdAt });
-const detail = (p: DetailRow) => ({ ...summary(p), description: p.description, messages: p.messages.map(messageView) });
+const detail = (p: DetailRow) => ({
+  ...summary(p),
+  description: p.description,
+  // The dates of the steps after filing, for the timeline (spec 020); the list keeps the light summary.
+  reviewedAt: p.reviewedAt,
+  resolvedAt: p.resolvedAt,
+  messages: p.messages.map(messageView),
+});
 const authorView = ({ author }: AdminRow) => {
   const profile = author.studentProfile ?? author.teacherProfile;
   return { id: author.id, role: author.role, firstName: profile?.firstName ?? '', lastName: profile?.lastName ?? '', email: author.email };

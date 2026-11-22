@@ -38,6 +38,11 @@ describe.skipIf(!contract.available)('responses match pqrs-api.yaml', () => {
     check(await me.get('/pqrs/mine'), 'get', '/pqrs/mine', 'PqrsMinePage');
     check(await me.get('/pqrs/mine?status=FILED'), 'get', '/pqrs/mine', 'PqrsMinePage');
     check(await me.get(`/pqrs/mine/${filed.body.id}`), 'get', '/pqrs/mine/{id}', 'PqrsMineDetail');
+    // spec 020: the detail also carries the dates of the steps, null or a date-time
+    for (const status of ['IN_REVIEW', 'RESOLVED'] as const) {
+      const stepped = await createPqrs(ctx.prisma, { authorId: me.user.id, status });
+      check(await me.get(`/pqrs/mine/${stepped.id}`), 'get', '/pqrs/mine/{id}', 'PqrsMineDetail');
+    }
     check(await me.get(`/pqrs/mine/${NOBODY}`), 'get', '/pqrs/mine/{id}', 'Error');
   });
 
