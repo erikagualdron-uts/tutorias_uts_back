@@ -61,8 +61,9 @@ describe('notifications: inbox', () => {
     const { m, student, notice } = await setup();
     await notice(student.user.id);
     const [item] = (await list(student).expect(200)).body.data;
-    expect(Object.keys(item).sort()).toEqual(['body', 'createdAt', 'id', 'moduleId', 'readAt', 'title', 'type']);
+    expect(Object.keys(item).sort()).toEqual(['body', 'createdAt', 'id', 'moduleId', 'pqrsId', 'readAt', 'title', 'type']);
     expect(item.moduleId).toBe(m.module.id);
+    expect(item.pqrsId).toBeNull();
     expect(item.readAt).toBeNull();
   });
 

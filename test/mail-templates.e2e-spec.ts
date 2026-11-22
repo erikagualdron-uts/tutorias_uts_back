@@ -60,8 +60,12 @@ describe('email templates: delivery of every kind', () => {
       SESSION_RESCHEDULED: { ...named, sessions: [{ ...named.sessions[0], to: new Date(session.startsAt.getTime() + 86_400_000).toISOString() }] },
       SESSION_CANCELLED_TEACHER: named,
       SESSION_RESTORED_TEACHER: { ...named, sessions: [{ sessionId: session.id, to: session.startsAt.toISOString() }] },
+      // PQRS events belong to a PQRS, not to a module: pqrs-notifications.e2e-spec.ts covers them.
+      PQRS_IN_REVIEW: {},
+      PQRS_RESPONDED: {},
+      PQRS_RESOLVED: {},
     };
-    for (const type of Object.values(OutboxEventType)) await createOutboxEvent(ctx.prisma, { type, moduleId: m.module.id, payload: payloads[type] as never });
+    for (const type of Object.values(OutboxEventType).filter((t) => !t.startsWith('PQRS_'))) await createOutboxEvent(ctx.prisma, { type, moduleId: m.module.id, payload: payloads[type] as never });
     await ctx.runOutbox();
 
     const pending = await ctx.prisma.notificationDelivery.findMany({ where: { channel: 'EMAIL' } });

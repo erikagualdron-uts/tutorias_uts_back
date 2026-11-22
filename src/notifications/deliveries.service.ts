@@ -85,7 +85,11 @@ export class DeliveriesService {
         to: device.token,
         title: notice.title,
         body: notice.body,
-        data: { notificationId: notice.id, moduleId: notice.moduleId },
+        data: {
+          notificationId: notice.id,
+          ...(notice.moduleId && { moduleId: notice.moduleId }),
+          ...(notice.pqrsId && { pqrsId: notice.pqrsId }),
+        },
       })),
     );
 

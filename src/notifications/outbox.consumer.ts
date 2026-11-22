@@ -70,7 +70,7 @@ export class OutboxConsumer {
           data: resolution.notices.map(({ userId, context }) => {
             const locale = locales.get(userId) ?? 'es';
             const { title, body } = renderNotification(event.type, locale, context);
-            return { userId, eventId: event.id, type: event.type, moduleId: event.moduleId, locale, title, body };
+            return { userId, eventId: event.id, type: event.type, moduleId: event.moduleId, pqrsId: event.pqrsId, locale, title, body };
           }),
         });
         const created = await tx.notification.findMany({ where: { eventId: event.id }, select: { id: true } });
