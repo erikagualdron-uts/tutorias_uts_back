@@ -16,6 +16,7 @@ export interface SettingValues {
   'pqrs.subjectMaxLength': number;
   'pqrs.descriptionMaxLength': number;
   'pqrs.responseMaxLength': number;
+  'dashboard.lowEnrollmentPercent': number;
   'chat.messageMaxLength': number;
   'chat.directRetentionMonths': number;
   'chat.moduleRetentionMonths': number;
@@ -37,6 +38,7 @@ export const SETTING_DEFAULTS: SettingValues = {
   'pqrs.subjectMaxLength': 120,
   'pqrs.descriptionMaxLength': 2000,
   'pqrs.responseMaxLength': 2000,
+  'dashboard.lowEnrollmentPercent': 30,
   'chat.messageMaxLength': 2000,
   'chat.directRetentionMonths': 24,
   'chat.moduleRetentionMonths': 6,
