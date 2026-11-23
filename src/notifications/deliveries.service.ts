@@ -122,8 +122,8 @@ export class DeliveriesService {
     if (!delivery) return;
     const { notification, notification: { user } } = delivery;
     if (unavailable(user)) return this.finish(delivery.id, 'SKIPPED', 'ACCOUNT_UNAVAILABLE');
-    const domain = await this.settings.get('auth.studentEmailDomain');
-    if (!user.email || !hasEmailDomain(user.email, domain)) return this.finish(delivery.id, 'SKIPPED', 'EMAIL_DOMAIN_NOT_ALLOWED');
+    const domains = [await this.settings.get('auth.studentEmailDomain'), await this.settings.get('auth.staffEmailDomain')];
+    if (!user.email || !domains.some((domain) => hasEmailDomain(user.email, domain))) return this.finish(delivery.id, 'SKIPPED', 'EMAIL_DOMAIN_NOT_ALLOWED');
 
     const mail = await this.smtp.transport();
     if (!mail) {
