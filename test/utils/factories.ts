@@ -1,7 +1,7 @@
 import type { Locale, OutboxEventType, Prisma, Role } from '@prisma/client';
 import argon2 from 'argon2';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
-import type { TestContext } from './test-app.js';
+import { PQRS_ITEM_IDS, PQRS_LIST_ID, type TestContext } from './test-app.js';
 
 export const TEST_PASSWORD = 'Clave1234';
 
@@ -277,3 +277,52 @@ export function createOutboxEvent(
     },
   });
 }
+
+// An extra item of the preloaded "Tipos de PQRS" list.
+export function createPqrsType(
+  prisma: PrismaService,
+  overrides: { status?: 'ACTIVE' | 'INACTIVE'; deletedAt?: Date | null; labelEs?: string; labelEn?: string } = {},
+) {
+  const n = nextId();
+  return prisma.dropdownItem.create({
+    data: {
+      listId: PQRS_LIST_ID,
+      labelEs: overrides.labelEs ?? `Tipo ${n}`,
+      labelEn: overrides.labelEn ?? `Type ${n}`,
+      sortOrder: 100,
+      status: overrides.status ?? 'ACTIVE',
+      deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}
+
+export function createPqrs(
+  prisma: PrismaService,
+  overrides: {
+    authorId: string;
+    typeId?: string;
+    status?: 'FILED' | 'IN_REVIEW' | 'RESOLVED';
+    subject?: string;
+    description?: string;
+    createdAt?: Date;
+    deletedAt?: Date | null;
+  },
+) {
+  return prisma.pqrs.create({
+    data: {
+      authorId: overrides.authorId,
+      typeId: overrides.typeId ?? PQRS_ITEM_IDS[0],
+      subject: overrides.subject ?? `Asunto ${nextId()}`,
+      description: overrides.description ?? 'Descripción de prueba',
+      status: overrides.status ?? 'FILED',
+      clientRequestId: crypto.randomUUID(),
+      ...(overrides.status && overrides.status !== 'FILED' && { reviewedAt: new Date() }),
+      ...(overrides.status === 'RESOLVED' && { resolvedAt: new Date() }),
+      ...(overrides.createdAt && { createdAt: overrides.createdAt }),
+      deletedAt: overrides.deletedAt ?? null,
+    },
+  });
+}
+
+export const createPqrsMessage = (prisma: PrismaService, pqrsId: string, authorId: string, body = 'Respuesta de prueba') =>
+  prisma.pqrsMessage.create({ data: { pqrsId, authorId, body } });

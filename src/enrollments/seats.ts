@@ -3,11 +3,15 @@ import type { PrismaService } from '../prisma/prisma.service.js';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
-// SQL fragment shared with the teacher availability check (spec 012): the enrollment `e` of a student
-// attends the session `s` of its module when it is live, ACTIVE (or CANCELLED with the session starting
-// before effective_until) and has no live absence for that session. The caller joins the active user.
-export const ATTENDS_SESSION = Prisma.sql`e.deleted_at IS NULL
-  AND (e.status = 'ACTIVE' OR (e.status = 'CANCELLED' AND s.starts_at < e.effective_until))
+// The enrollment `e` of a student covers the session `s` of its module when it is live and ACTIVE (or
+// CANCELLED with the session starting before effective_until). The student calendar (spec 021) lists every
+// covered session, also the ones the student skipped.
+export const ENROLLED_IN_SESSION = Prisma.sql`e.deleted_at IS NULL
+  AND (e.status = 'ACTIVE' OR (e.status = 'CANCELLED' AND s.starts_at < e.effective_until))`;
+
+// SQL fragment shared with the teacher availability check (spec 012): the student attends the session when
+// the enrollment covers it and has no live absence for it. The caller joins the active user.
+export const ATTENDS_SESSION = Prisma.sql`${ENROLLED_IN_SESSION}
   AND NOT EXISTS (
     SELECT 1 FROM session_absences a
     WHERE a.enrollment_id = e.id AND a.session_id = s.id AND a.deleted_at IS NULL

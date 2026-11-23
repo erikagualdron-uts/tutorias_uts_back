@@ -197,7 +197,7 @@ export class TestClock extends Clock {
 }
 
 // Stands in for ConfigUsageService. It delegates to the real service (modules are real rows) unless
-// a test fixes a value: `modulesInPeriod`, `roomUsage`, `itemsInUse`, or the enrolled students of a
+// a test fixes a value: `modulesInPeriod`, `roomUsage`, `itemsInUse` (else real PQRS count), or the enrolled students of a
 // module with `setEnrolled`; otherwise the real enrollments are counted.
 export class FakeConfigUsage extends ConfigUsageService {
   modulesInPeriod: number | null = null;
@@ -243,7 +243,7 @@ export class FakeConfigUsage extends ConfigUsageService {
   }
 
   override isDropdownItemInUse(itemId: string) {
-    return Promise.resolve(this.itemsInUse.has(itemId));
+    return this.itemsInUse.has(itemId) ? Promise.resolve(true) : this.real.isDropdownItemInUse(itemId);
   }
 
   reset() {
@@ -357,6 +357,7 @@ export async function createTestApp(): Promise<TestContext> {
     await prisma.$executeRawUnsafe(
       `DELETE FROM dropdown_items WHERE id NOT IN (${PQRS_ITEM_IDS.map((id) => `'${id}'`).join(',')})`,
     );
+    await prisma.$executeRawUnsafe(`DELETE FROM dropdown_lists WHERE id <> '${PQRS_LIST_ID}'`);
     await prisma.$executeRawUnsafe(
       `UPDATE dropdown_items SET status = 'ACTIVE', deleted_at = NULL, sort_order = right(id::text, 1)::int,
          label_es = CASE right(id::text, 1) WHEN '1' THEN 'Petición' WHEN '2' THEN 'Queja' WHEN '3' THEN 'Reclamo' ELSE 'Sugerencia' END,
@@ -368,8 +369,10 @@ export async function createTestApp(): Promise<TestContext> {
     smtp.reset();
     logs.reset();
     deliveryQueue.reset();
-    const keys = await redis.keys('login:*');
-    if (keys.length) await redis.del(keys);
+    for (const pattern of ['login:*', 'chat:*']) {
+      const keys = await redis.keys(pattern);
+      if (keys.length) await redis.del(keys);
+    }
     mailbox.clear();
     clock.reset();
   };

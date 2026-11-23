@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AccountsModule } from './accounts/accounts.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { ChatModule } from './chat/chat.module.js';
 import { ClockModule } from './common/clock.js';
 import { ConfigUsageModule } from './config-usage/config-usage.module.js';
 import { EnrollmentsModule } from './enrollments/enrollments.module.js';
@@ -11,6 +12,8 @@ import { ModulesModule } from './modules/modules.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { OutboxModule } from './outbox/outbox.module.js';
 import { PeriodsModule } from './periods/periods.module.js';
+import { DashboardModule } from './dashboard/dashboard.module.js';
+import { PqrsModule } from './pqrs/pqrs.module.js';
 import { RoomsModule } from './rooms/rooms.module.js';
 import { validateEnv } from './config/env.js';
 import { MailModule } from './mail/mail.module.js';
@@ -40,6 +43,9 @@ import { UsersModule } from './users/users.module.js';
     RedisModule,
     MailModule,
     NotificationsModule,
+    PqrsModule,
+    DashboardModule,
+    ChatModule,
     AuthModule,
     AccountsModule,
     TeachersModule,

@@ -11,10 +11,10 @@ const notice = { title: 'Se reprogramó tu tutoría', body: 'Cálculo I: pasó d
 const compose = (type: OutboxEventType, locale: 'es' | 'en', n = notice) => composeMail(renderNoticeMail(type, locale, n), brand);
 
 describe('notice email', () => {
-  it.each(LOCALES)('has its own introduction for each of the seven types in %s', (locale) => {
+  it.each(LOCALES)('has its own introduction for each of the ten types in %s', (locale) => {
     const intros = TYPES.map((type) => renderNoticeMail(type, locale, notice).blocks[0].text);
-    expect(TYPES).toHaveLength(7);
-    expect(new Set(intros).size).toBe(7);
+    expect(TYPES).toHaveLength(10);
+    expect(new Set(intros).size).toBe(10);
   });
 
   it.each(TYPES.flatMap((type) => LOCALES.map((locale) => [type, locale] as const)))('%s in %s carries the notice, the brand and nothing unresolved', (type, locale) => {
@@ -44,7 +44,7 @@ describe('notice email', () => {
 
   it.each(LOCALES)('names the state in a badge of its own for each type in %s, so color is never the only signal', (locale) => {
     const badges = TYPES.map((type) => renderNoticeMail(type, locale, notice).badge);
-    expect(new Set(badges).size).toBe(7);
+    expect(new Set(badges).size).toBe(10);
     for (const type of TYPES) expect(compose(type, locale).text).toContain(`[${renderNoticeMail(type, locale, notice).badge}]`);
   });
 
@@ -59,7 +59,7 @@ describe('notice email', () => {
     expect(content.blocks[0].text).toContain('Hola');
   });
 
-  it('picks the accent by type: errors for cancellations, warning for the move, success for restores, info for the rest', () => {
+  it('picks the accent by type: errors for cancellations, warning for the move, success for restores and a resolved PQRS, info for the rest', () => {
     const tones: Record<OutboxEventType, Tone> = {
       SESSION_CANCELLED_TEACHER: 'error',
       SESSIONS_CANCELLED_HOLIDAY: 'error',
@@ -68,6 +68,9 @@ describe('notice email', () => {
       SESSIONS_RESTORED_HOLIDAY: 'success',
       MODULE_TEACHER_CHANGED: 'info',
       MODULE_ROOM_CHANGED: 'info',
+      PQRS_IN_REVIEW: 'info',
+      PQRS_RESPONDED: 'info',
+      PQRS_RESOLVED: 'success',
     };
     for (const type of TYPES) expect(renderNoticeMail(type, 'es', notice).tone).toBe(tones[type]);
   });

@@ -3,10 +3,11 @@ import { PeriodsModule } from '../periods/periods.module.js';
 import { EnrollmentsController } from './enrollments.controller.js';
 import { EnrollmentsService } from './enrollments.service.js';
 import { OfferService } from './offer.service.js';
+import { StudentCalendarService } from './student-calendar.service.js';
 
 @Module({
   imports: [PeriodsModule],
   controllers: [EnrollmentsController],
-  providers: [EnrollmentsService, OfferService],
+  providers: [EnrollmentsService, OfferService, StudentCalendarService],
 })
 export class EnrollmentsModule {}

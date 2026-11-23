@@ -9,7 +9,11 @@ import {
 } from 'vitest';
 import { causeOf, DeliveriesService } from '../src/notifications/deliveries.service.js';
 import { loginStudent } from './utils/enrollment.js';
-import { createEnrollment, createOutboxEvent, createUser, TEST_PASSWORD } from './utils/factories.js';
+import { createEnrollment, createOutboxEvent, createPqrs, createUser, TEST_PASSWORD } from './utils/factories.js';
+import { adminCaller, pqrsBody, studentCaller } from './utils/pqrs.js';
+import { ChatRetentionTask } from '../src/chat/chat-retention.task.js';
+import { closeAllChatClients, connectChat, createChatMessage } from './utils/chat.js';
+import { chatWorld, directWith, messageBody, moduleChatOf } from './utils/chat-world.js';
 import { teacherApi } from './utils/teacher.js';
 import { seriesModule, start } from './utils/teacher-fixture.js';
 import { createTestApp, type TestContext } from './utils/test-app.js';
@@ -170,5 +174,100 @@ describe('logs never contain secrets', () => {
     expect(output).toContain('Delivery failed');
     const secrets = [smtpPassword, row.passwordEncrypted, student.user.email, device, notice.title, notice.body, 'cae-usuario'];
     for (const secret of secrets) expect(output, `log leaked ${secret.slice(0, 6)}…`).not.toContain(secret);
+  });
+  // Spec 017: filing, answering and resolving a PQRS and noticing its author log ids and causes only.
+  it('keeps the subject, the description and the text of a reply out of the logs', async () => {
+    const me = await studentCaller(ctx);
+    const cae = await adminCaller(ctx);
+    const subject = 'Asunto-confidencial-pqrs';
+    const description = 'Descripcion-confidencial-pqrs';
+    const reply = 'Respuesta-confidencial-pqrs';
+    const filed = await me.post('/pqrs', pqrsBody({ subject, description }));
+    await me.post('/pqrs', pqrsBody({ subject: '', description }));
+    const seeded = await createPqrs(ctx.prisma, { authorId: me.user.id, subject, description });
+    for (const id of [filed.body.id as string, seeded.id]) {
+      await cae.post(`/pqrs/${id}/review`);
+      await cae.post(`/pqrs/${id}/responses`, { body: reply });
+      await cae.post(`/pqrs/${id}/resolve`);
+    }
+    await cae.post(`/pqrs/${filed.body.id}/responses`, { body: reply });
+    await ctx.runOutbox();
+    for (const delivery of await ctx.prisma.notificationDelivery.findMany()) {
+      await ctx.app.get(DeliveriesService)[delivery.channel === 'PUSH' ? 'deliverPush' : 'deliverEmail'](delivery.id);
+    }
+
+    for (const text of [description, reply]) expect(output, `log leaked ${text}`).not.toContain(text);
+    expect(output.split(subject).length - 1, 'the subject only appears in the notice, never in a log line').toBe(0);
+  });
+  // Spec 019: the dashboards only read; they log nothing about people, PQRS or messages.
+  it('keeps PQRS subjects and module names out of the logs when the dashboards are read', async () => {
+    const me = await studentCaller(ctx);
+    const cae = await adminCaller(ctx);
+    const subject = 'Asunto-confidencial-dashboard';
+    await createPqrs(ctx.prisma, { authorId: me.user.id, subject });
+    for (const caller of [me, cae]) {
+      await caller.get(caller === me ? '/dashboard/student' : '/dashboard/admin/overview');
+    }
+    await cae.get('/dashboard/admin/changes');
+    await cae.get('/dashboard/admin/rooms');
+    await me.get('/dashboard/teacher'); // refused: still no text in the logs
+    expect(output).not.toContain(subject);
+    expect(output).not.toContain(me.user.email);
+  });
+  // Spec 021: the student calendar only reads; names of modules, teachers and rooms never reach the logs.
+  it('keeps module names, teachers and the student out of the logs when the calendar is read', async () => {
+    const p = await start(ctx); // moves the clock to 2030: sign in after it
+    const me = await studentCaller(ctx);
+    const name = 'Modulo-confidencial-calendario';
+    const m = await seriesModule(ctx, p.id, { weeks: 1, name });
+    await createEnrollment(ctx.prisma, { studentId: me.user.id, moduleId: m.module.id });
+    const teacher = await ctx.prisma.teacherProfile.findFirstOrThrow({ where: { userId: m.teacher.user.id } });
+
+    expect((await me.get('/student/calendar?from=2030-01-07&to=2030-01-13')).body.data).toHaveLength(1);
+    await me.get('/student/calendar?from=hoy&to=2030-01-13'); // refused: still nothing in the logs
+    for (const text of [name, teacher.lastName, me.user.email]) expect(output, `log leaked ${text}`).not.toContain(text);
+  });
+  // Spec 022: the "is typing" notice is ephemeral; neither it nor the conversation it names reaches the logs.
+  it('writes nothing about a typing notice, its conversation or a retried message in the logs', async () => {
+    const { student, teacher } = await chatWorld(ctx);
+    const direct = await directWith(student, teacher);
+    const [mine, theirs] = [await connectChat(ctx, student.token), await connectChat(ctx, teacher.token)];
+    try {
+      await theirs.emitWithAck('conversation:open', { conversationId: direct.id });
+      const before = output.length;
+      await mine.emitWithAck('typing', { conversationId: direct.id });
+      await theirs.waitFor('typing');
+      await mine.emitWithAck('typing', { conversationId: 'not-a-uuid' });
+      const secret = 'Pendiente-privado-chat-4';
+      const body = messageBody({ body: secret });
+      await student.post(`/chat/conversations/${direct.id}/messages`, body);
+      await student.post(`/chat/conversations/${direct.id}/messages`, body); // the retry of a pending message
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const written = output.slice(before);
+      for (const text of [secret, direct.id, 'typing']) expect(written, `log leaked ${text}`).not.toContain(text);
+    } finally {
+      closeAllChatClients();
+    }
+  });
+  // Spec 018: sending, announcing, pushing (also when it fails) and the retention log counts, never text.
+  it('keeps the text of chat messages and of their push out of the logs', async () => {
+    const { student, teacher, module } = await chatWorld(ctx);
+    const secrets = ['Mensaje-privado-chat-1', 'Anuncio-privado-chat-2', 'Mensaje-viejo-chat-3'];
+    await ctx.http().put('/api/v1/notifications/devices').set('Authorization', `Bearer ${teacher.token}`).send({ token: 'ExponentPushToken[log-chat]', platform: 'ANDROID' });
+    const direct = await directWith(student, teacher);
+    const body = messageBody({ body: secrets[0] });
+    await student.post(`/chat/conversations/${direct.id}/messages`, body);
+    await student.post(`/chat/conversations/${direct.id}/messages`, body);
+    ctx.push.failNext = 1;
+    await student.post(`/chat/conversations/${direct.id}/messages`, messageBody({ body: secrets[0] }));
+    await student.post(`/chat/conversations/${direct.id}/messages`, messageBody({ body: '' }));
+    const group = await moduleChatOf(teacher, module.id);
+    await teacher.post(`/chat/conversations/${group}/messages`, messageBody({ body: secrets[1], kind: 'ANNOUNCEMENT' }));
+    await student.post(`/chat/conversations/${direct.id}/read`);
+    await createChatMessage(ctx.prisma, { conversationId: direct.id, senderId: student.user.id, body: secrets[2], createdAt: new Date('2020-01-01T00:00:00Z') });
+    await ctx.app.get(ChatRetentionTask).run();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    for (const text of secrets) expect(output, `log leaked ${text}`).not.toContain(text);
   });
 });

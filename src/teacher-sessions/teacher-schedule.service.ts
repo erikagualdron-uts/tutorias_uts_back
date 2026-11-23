@@ -7,10 +7,11 @@ import type { Env } from '../config/env.js';
 import { ConfigUsageService } from '../config-usage/config-usage.service.js';
 import { sessionSeats } from '../enrollments/seats.js';
 import { bogotaToUtc, formatTime } from '../modules/sessions.rules.js';
-import { formatCalendarDay, parseCalendarDay } from '../periods/periods.rules.js';
+import { calendarMeta } from '../periods/calendar-meta.js';
+import { parseCalendarDay } from '../periods/periods.rules.js';
 import { PeriodsService } from '../periods/periods.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { parseCalendarRange, pickCalendarPeriod } from './calendar.rules.js';
+import { parseCalendarRange } from './calendar.rules.js';
 import type {
   TeacherCalendarQueryDto,
   TeacherModulesQueryDto,
@@ -131,31 +132,8 @@ export class TeacherScheduleService {
   // the active period or, without one, the last closed period read only (spec 013, research R-2).
   async calendar(teacherId: string, query: TeacherCalendarQueryDto) {
     const { from, to } = parseCalendarRange(query.from, query.to);
-    await this.periods.closeExpired();
-    const [active, closed] = await Promise.all([
-      this.prisma.academicPeriod.findFirst({ where: { status: 'ACTIVE', deletedAt: null } }),
-      this.prisma.academicPeriod.findFirst({
-        where: { status: 'CLOSED', deletedAt: null },
-        orderBy: [{ endsOn: 'desc' }, { id: 'asc' }],
-      }),
-    ]);
-    const period = pickCalendarPeriod(active, closed);
-    const meta = {
-      from: query.from,
-      to: query.to,
-      period: period && {
-        id: period.id,
-        name: period.name,
-        startsOn: formatCalendarDay(period.startsOn),
-        endsOn: formatCalendarDay(period.endsOn),
-        status: period.status as 'ACTIVE' | 'CLOSED',
-      },
-      hours: {
-        earliest: formatTime(this.config.get('MODULE_EARLIEST_MINUTE', { infer: true })),
-        latest: formatTime(this.config.get('MODULE_LATEST_MINUTE', { infer: true })),
-      },
-      changeLeadMinutes: this.leadMinutes,
-    };
+    const { period, meta: calendar } = await calendarMeta(this.prisma, this.periods, this.config, query);
+    const meta = { ...calendar, changeLeadMinutes: this.leadMinutes };
     if (!period) return { data: [], meta };
     const range = { from: bogotaToUtc(from, 0), to: bogotaToUtc(new Date(to.getTime() + DAY_MS), 0) };
     const rows = await this.prisma.moduleSession.findMany({

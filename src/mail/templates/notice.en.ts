@@ -9,6 +9,9 @@ export const noticeEn: NoticeFrames = {
     SESSION_RESCHEDULED: { tone: 'warning', badge: 'Time change', intro: 'Hello, one of your sessions has a new time.' },
     SESSION_CANCELLED_TEACHER: { tone: 'error', badge: 'Cancelled', intro: 'Hello, the teacher cancelled one of your sessions.' },
     SESSION_RESTORED_TEACHER: { tone: 'success', badge: 'Reinstated', intro: 'Hello, the teacher reinstated a session that had been cancelled.' },
+    PQRS_IN_REVIEW: { tone: 'info', badge: 'PQRS in review', intro: 'Hello, the CAE started reviewing your PQRS.' },
+    PQRS_RESPONDED: { tone: 'info', badge: 'Reply to your PQRS', intro: 'Hello, the CAE replied to your PQRS.' },
+    PQRS_RESOLVED: { tone: 'success', badge: 'PQRS resolved', intro: 'Hello, the CAE resolved your PQRS.' },
   },
   generic: { tone: 'info', badge: 'News', intro: 'Hello, there is news about one of your modules.' },
 };

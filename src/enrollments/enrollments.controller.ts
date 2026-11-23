@@ -2,8 +2,10 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Qu
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentAuth, Roles, type AuthContext } from '../common/guards/decorators.js';
 import { CreateEnrollmentDto, MyEnrollmentsQueryDto, OfferQueryDto } from './dto/enrollment.dto.js';
+import { StudentCalendarQueryDto } from './dto/student-calendar-query.dto.js';
 import { EnrollmentsService } from './enrollments.service.js';
 import { OfferService } from './offer.service.js';
+import { StudentCalendarService } from './student-calendar.service.js';
 
 // The student is always the token's user, never a parameter: someone else's id is a 404.
 @ApiTags('student')
@@ -14,7 +16,14 @@ export class EnrollmentsController {
   constructor(
     private readonly offer: OfferService,
     private readonly enrollments: EnrollmentsService,
+    private readonly calendar: StudentCalendarService,
   ) {}
+
+  // Sessions of one week (past and future, any state) for the weekly calendar (spec 021).
+  @Get('calendar')
+  weekly(@CurrentAuth() { user }: AuthContext, @Query() query: StudentCalendarQueryDto) {
+    return this.calendar.calendar(user.id, query);
+  }
 
   @Get('modules')
   modules(@CurrentAuth() { user }: AuthContext, @Query() query: OfferQueryDto) {

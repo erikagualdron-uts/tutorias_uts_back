@@ -8,7 +8,8 @@ type Db = PrismaService | Prisma.TransactionClient;
 
 export interface EventRow {
   type: OutboxEventType;
-  moduleId: string;
+  moduleId: string | null;
+  pqrsId: string | null;
   payload: Prisma.JsonValue;
   createdAt: Date;
 }
@@ -55,11 +56,21 @@ function bogotaDayRange(day: unknown): { from: Date; to: Date } | null {
   };
 }
 
-const base = (moduleName: string): NotificationContext => ({ moduleName, sessions: [], scope: null, teacherName: null, roomName: null });
+const base = (moduleName: string): NotificationContext => ({
+  moduleName,
+  sessions: [],
+  scope: null,
+  teacherName: null,
+  roomName: null,
+  pqrsSubject: null,
+});
 
 // Reads what the event refers to and who must hear about it (research.md R-2). Nothing is written.
 export async function resolveEvent(db: Db, event: EventRow): Promise<Resolution> {
-  const module = await db.module.findFirst({ where: { id: event.moduleId, deletedAt: null }, select: { name: true } });
+  if (event.pqrsId) return resolvePqrsEvent(db, event.pqrsId);
+  if (!event.moduleId) return { skip: 'MODULE_NOT_FOUND' };
+  const moduleId = event.moduleId;
+  const module = await db.module.findFirst({ where: { id: moduleId, deletedAt: null }, select: { name: true } });
   if (!module) return { skip: 'MODULE_NOT_FOUND' };
   const payload = isObject(event.payload) ? event.payload : {};
   const context = base(module.name);
@@ -68,7 +79,7 @@ export async function resolveEvent(db: Db, event: EventRow): Promise<Resolution>
     const teacherId = typeof payload.toTeacherId === 'string' ? payload.toTeacherId : '';
     const profile = await db.teacherProfile.findUnique({ where: { userId: teacherId }, select: { firstName: true, lastName: true } });
     if (!profile) return { skip: 'TEACHER_NOT_FOUND' };
-    return notices(await attendingStudents(db, { moduleId: event.moduleId, after: event.createdAt }), () => ({
+    return notices(await attendingStudents(db, { moduleId, after: event.createdAt }), () => ({
       ...context,
       teacherName: `${profile.firstName} ${profile.lastName}`,
     }));
@@ -78,18 +89,18 @@ export async function resolveEvent(db: Db, event: EventRow): Promise<Resolution>
     const roomId = typeof payload.toRoomId === 'string' ? payload.toRoomId : '';
     const room = await db.room.findUnique({ where: { id: roomId }, select: { name: true, location: { select: { name: true } } } });
     if (!room) return { skip: 'ROOM_NOT_FOUND' };
-    return notices(await attendingStudents(db, { moduleId: event.moduleId, after: event.createdAt }), () => ({
+    return notices(await attendingStudents(db, { moduleId, after: event.createdAt }), () => ({
       ...context,
       roomName: `${room.name} (${room.location.name})`,
     }));
   }
 
-  return resolveSessionEvent(db, event, payload, context);
+  return resolveSessionEvent(db, { ...event, moduleId }, payload, context);
 }
 
 async function resolveSessionEvent(
   db: Db,
-  event: EventRow,
+  event: EventRow & { moduleId: string },
   payload: Record<string, unknown>,
   context: NotificationContext,
 ): Promise<Resolution> {
@@ -136,4 +147,15 @@ async function resolveSessionEvent(
 
 function notices(attending: Map<string, string[]>, build: (sessionIds: string[]) => NotificationContext): Resolution {
   return { notices: [...attending].map(([userId, sessionIds]) => ({ userId, context: build(sessionIds) })) };
+}
+
+// The author of the PQRS is the only one who hears about it, and only while the account can sign in.
+async function resolvePqrsEvent(db: Db, pqrsId: string): Promise<Resolution> {
+  const pqrs = await db.pqrs.findFirst({
+    where: { id: pqrsId, deletedAt: null },
+    select: { subject: true, author: { select: { id: true, status: true, deletedAt: true } } },
+  });
+  if (!pqrs) return { skip: 'PQRS_NOT_FOUND' };
+  if (pqrs.author.status !== 'ACTIVE' || pqrs.author.deletedAt) return { skip: 'AUTHOR_UNAVAILABLE' };
+  return { notices: [{ userId: pqrs.author.id, context: { ...base(''), pqrsSubject: pqrs.subject } }] };
 }

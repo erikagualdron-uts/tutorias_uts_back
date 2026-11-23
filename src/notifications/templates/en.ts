@@ -3,6 +3,7 @@ import type { NotificationContext, Rendered, TemplateSet } from './types.js';
 
 const words: Words = { and: 'and', fromTo: (first, last) => `from ${first} to ${last}` };
 const CHECK = 'Check the module in the app.';
+const OPEN = 'Open it in the app.';
 
 const dates = (c: NotificationContext) => formatRange(c.sessions.map((s) => s.at), 'en', words);
 const many = (c: NotificationContext) => c.sessions.length > 1;
@@ -84,5 +85,17 @@ export const en: TemplateSet = {
   MODULE_ROOM_CHANGED: (c) => ({
     title: 'The room of your module changed',
     body: `${c.moduleName}: the upcoming sessions will be in ${c.roomName}. ${CHECK}`,
+  }),
+  PQRS_IN_REVIEW: (c) => ({
+    title: 'Your PQRS is in review',
+    body: `"${c.pqrsSubject}": the CAE started reviewing it. ${OPEN}`,
+  }),
+  PQRS_RESPONDED: (c) => ({
+    title: 'Your PQRS got a reply',
+    body: `"${c.pqrsSubject}": the CAE wrote a reply. ${OPEN}`,
+  }),
+  PQRS_RESOLVED: (c) => ({
+    title: 'Your PQRS was resolved',
+    body: `"${c.pqrsSubject}": the CAE marked it as resolved. ${OPEN}`,
   }),
 };

@@ -13,6 +13,7 @@ const context = (overrides: Partial<NotificationContext> = {}): NotificationCont
   scope: 'SESSION',
   teacherName: 'Ana Gómez',
   roomName: 'Sala 204',
+  pqrsSubject: 'Cambio de horario',
   ...overrides,
 });
 
@@ -24,6 +25,9 @@ const TYPES: OutboxEventType[] = [
   'SESSION_RESCHEDULED',
   'SESSION_CANCELLED_TEACHER',
   'SESSION_RESTORED_TEACHER',
+  'PQRS_IN_REVIEW',
+  'PQRS_RESPONDED',
+  'PQRS_RESOLVED',
 ];
 const LOCALES: Locale[] = ['es', 'en'];
 
@@ -32,7 +36,7 @@ describe('renderNotification', () => {
     const { title, body } = renderNotification(type, locale, context());
     expect(title.length).toBeGreaterThan(0);
     expect(title.length).toBeLessThanOrEqual(160);
-    expect(body).toContain('Cálculo I');
+    expect(body).toContain(type.startsWith('PQRS_') ? 'Cambio de horario' : 'Cálculo I');
     expect(body.length).toBeLessThanOrEqual(1000);
   });
 
@@ -103,6 +107,14 @@ describe('renderNotification', () => {
     const { title, body } = renderNotification('SESSION_RESCHEDULED', 'es', context({ moduleName: 'M'.repeat(2000) }));
     expect(title.length).toBeLessThanOrEqual(160);
     expect(body.length).toBeLessThanOrEqual(1000);
+  });
+
+  it.each(LOCALES)('PQRS notices name the subject and never carry a reply text in %s', (locale) => {
+    for (const type of ['PQRS_IN_REVIEW', 'PQRS_RESPONDED', 'PQRS_RESOLVED'] as const) {
+      const { title, body } = renderNotification(type, locale, context({ pqrsSubject: 'Beca de transporte' }));
+      expect(body).toContain('"Beca de transporte"');
+      expect(title.length).toBeGreaterThan(0);
+    }
   });
 
   it('never includes identifiers or addresses', () => {

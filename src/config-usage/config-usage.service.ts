@@ -8,8 +8,7 @@ export interface RoomUsage {
 }
 
 // Answers "is this record used by something else?" for the configuration rules.
-// Modules (spec 010) and enrollments (spec 011) are real. PQRS does not exist yet, so no dropdown
-// item is in use until it replaces that body; the rule that calls it is already wired and tested.
+// Modules (spec 010), enrollments (spec 011) and PQRS (spec 017) are real rows.
 @Injectable()
 export class ConfigUsageService {
   constructor(private readonly prisma: PrismaService) {}
@@ -52,7 +51,8 @@ export class ConfigUsageService {
     });
   }
 
-  isDropdownItemInUse(_itemId: string): Promise<boolean> {
-    return Promise.resolve(false);
+  // An item is in use as soon as one PQRS was filed with it, also a deleted one: the history keeps its type.
+  async isDropdownItemInUse(itemId: string): Promise<boolean> {
+    return (await this.prisma.pqrs.count({ where: { typeId: itemId } })) > 0;
   }
 }

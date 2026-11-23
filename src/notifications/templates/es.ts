@@ -3,6 +3,7 @@ import type { NotificationContext, Rendered, TemplateSet } from './types.js';
 
 const words: Words = { and: 'y', fromTo: (first, last) => `del ${first} al ${last}` };
 const CHECK = 'Revisa el módulo en la app.';
+const OPEN = 'Revísala en la app.';
 
 const dates = (c: NotificationContext) => formatRange(c.sessions.map((s) => s.at), 'es', words);
 const many = (c: NotificationContext) => c.sessions.length > 1;
@@ -84,5 +85,17 @@ export const es: TemplateSet = {
   MODULE_ROOM_CHANGED: (c) => ({
     title: 'Cambió el salón de tu módulo',
     body: `${c.moduleName}: las próximas sesiones serán en ${c.roomName}. ${CHECK}`,
+  }),
+  PQRS_IN_REVIEW: (c) => ({
+    title: 'Tu PQRS está en revisión',
+    body: `"${c.pqrsSubject}": el CAE empezó a revisarla. ${OPEN}`,
+  }),
+  PQRS_RESPONDED: (c) => ({
+    title: 'Respondieron tu PQRS',
+    body: `"${c.pqrsSubject}": el CAE escribió una respuesta. ${OPEN}`,
+  }),
+  PQRS_RESOLVED: (c) => ({
+    title: 'Tu PQRS fue resuelta',
+    body: `"${c.pqrsSubject}": el CAE la marcó como resuelta. ${OPEN}`,
   }),
 };
