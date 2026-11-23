@@ -270,4 +270,26 @@ describe('logs never contain secrets', () => {
 
     for (const text of secrets) expect(output, `log leaked ${text}`).not.toContain(text);
   });
+
+  // Spec 023: reading as each role (lists, details, chat, PQRS) writes none of the texts or secrets.
+  it('keeps passwords, tokens and the texts of messages and PQRS out of the logs when every role reads', async () => {
+    const { student, teacher, cae, module } = await chatWorld(ctx);
+    const text = ['Mensaje-lectura-roles-1', 'Descripcion-pqrs-roles-2'];
+    const direct = await directWith(student, teacher);
+    await student.post(`/chat/conversations/${direct.id}/messages`, messageBody({ body: text[0] }));
+    const filed = await student.post('/pqrs', pqrsBody({ description: text[1] }));
+    const range = `?from=${new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)}&to=${new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10)}`;
+    const reads: [typeof student, string[]][] = [
+      [cae, ['/modules', `/modules/${module.id}`, '/teachers', '/students', '/pqrs', `/pqrs/${filed.body.id}`, '/dashboard/admin/overview', '/settings/smtp', '/chat/conversations']],
+      [teacher, ['/teacher/modules', '/teacher/sessions', `/teacher/calendar${range}`, '/dashboard/teacher', `/chat/conversations/${direct.id}/messages`]],
+      [student, ['/student/modules', '/student/enrollments', `/student/calendar${range}`, '/dashboard/student', '/pqrs/mine', `/chat/conversations/${direct.id}/messages`]],
+    ];
+    const before = output.length;
+    for (const [who, paths] of reads) for (const path of paths) await who.get(path);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const written = output.slice(before);
+
+    const secrets = [...text, TEST_PASSWORD, student.token, teacher.token, cae.token];
+    for (const secret of secrets) expect(written, `log leaked ${secret}`).not.toContain(secret);
+  });
 });
