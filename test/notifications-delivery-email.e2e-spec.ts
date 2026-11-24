@@ -149,7 +149,7 @@ describe('notifications: email delivery', () => {
     expect(lastError).not.toContain(students[0].email);
   });
 
-  it('skips an email of a domain that is not the student domain, without stopping the other channels', async () => {
+  it('skips an email of a domain that is not institutional, without stopping the other channels', async () => {
     const { students, cancel } = await scenario([{ email: 'estudiante@gmail.com' }]);
     await cancel();
     const delivery = await emailOf(students[0].id);
