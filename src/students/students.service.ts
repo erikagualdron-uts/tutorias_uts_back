@@ -5,7 +5,9 @@ import { Clock } from '../common/clock.js';
 import { searchCondition } from '../accounts/account-search.js';
 import { AppException } from '../common/errors/app.exception.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { toUserSummary } from '../auth/user-summary.js';
 import type { ListStudentsQuery } from './dto/list-students.dto.js';
+import type { UpdateOwnNameDto } from './dto/update-own-name.dto.js';
 
 interface StudentRow {
   id: string;
@@ -47,6 +49,37 @@ export class StudentsService {
     private readonly clock: Clock,
     private readonly accounts: AccountStatusService,
   ) {}
+
+  // One transaction: the new name and its record are saved together or not at all (D-130).
+  updateOwnName(userId: string, dto: UpdateOwnNameDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findFirst({
+        where: { id: userId, deletedAt: null },
+        include: { studentProfile: true, teacherProfile: true },
+      });
+      const profile = user?.studentProfile;
+      if (!user || !profile) {
+        throw new AppException(403, 'ACCOUNT_UNAVAILABLE', 'Account unavailable');
+      }
+      if (profile.firstName === dto.firstName && profile.lastName === dto.lastName) {
+        return toUserSummary(user);
+      }
+      const studentProfile = await tx.studentProfile.update({
+        where: { userId },
+        data: { firstName: dto.firstName, lastName: dto.lastName },
+      });
+      await tx.studentNameChange.create({
+        data: {
+          userId,
+          previousFirstName: profile.firstName,
+          previousLastName: profile.lastName,
+          newFirstName: dto.firstName,
+          newLastName: dto.lastName,
+        },
+      });
+      return toUserSummary({ ...user, studentProfile });
+    });
+  }
 
   deactivate(id: string) {
     return this.close(id, 'deactivate');
